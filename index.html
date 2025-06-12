@@ -62,7 +62,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-    import { getDatabase, ref, get, set, update, child } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+    import { getDatabase, ref, get, set, update, onValue } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
@@ -84,17 +84,23 @@
       if (!username) return alert("Enter username");
       currentUser = username;
 
+      const hasNFC = "nfc" in navigator;
+
       const userRef = ref(db, 'users/' + username);
       const snapshot = await get(userRef);
 
       if (!snapshot.exists()) {
-        await set(userRef, { balance: 1000, history: [] });
+        await set(userRef, { balance: 1000, nfc: hasNFC, online: true, history: [] });
+      } else {
+        await update(userRef, { nfc: hasNFC, online: true });
       }
 
       document.getElementById("userLabel").textContent = username;
       document.getElementById("dashboard").style.display = "block";
       updateBalance();
       loadHistory();
+
+      onValue(ref(db, 'users/' + username + '/history'), () => loadHistory());
     }
 
     async function updateBalance() {
@@ -123,14 +129,18 @@
       const senderRef = ref(db, 'users/' + currentUser);
       const receiverRef = ref(db, 'users/' + receiver);
 
-      const senderSnap = await get(senderRef);
-      const receiverSnap = await get(receiverRef);
+      const [senderSnap, receiverSnap] = await Promise.all([
+        get(senderRef),
+        get(receiverRef)
+      ]);
 
       if (!receiverSnap.exists()) return alert("Receiver not found");
 
       const senderData = senderSnap.val();
       const receiverData = receiverSnap.val();
 
+      if (!receiverData.nfc) return alert("Receiver does not support NFC");
+      if (!receiverData.online) return alert("Receiver is offline");
       if (senderData.balance < amount) return alert("Insufficient balance");
 
       const newSenderBal = senderData.balance - amount;
@@ -151,9 +161,14 @@
       });
 
       updateBalance();
-      loadHistory();
       alert("Money Sent!");
     }
+
+    window.addEventListener("beforeunload", () => {
+      if (currentUser) {
+        update(ref(db, 'users/' + currentUser), { online: false });
+      }
+    });
   </script>
 </body>
 </html>
