@@ -3,114 +3,66 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>NFC P2P Payment</title>
+  <title>NFC Money Transfer</title>
   <style>
-    :root {
-      --bg-color: #121212;
-      --text-color: white;
-      --accent-color: #03dac6;
-    }
-    body.light-mode {
-      --bg-color: #f9f9f9;
-      --text-color: #121212;
-      --accent-color: #00796b;
-    }
     body {
-      font-family: 'Poppins', sans-serif;
-      margin: 0;
-      background: var(--bg-color);
-      color: var(--text-color);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 1rem;
-      transition: all 0.3s ease;
+      background: #111;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      padding: 20px;
     }
-    h1 { color: var(--accent-color); }
+    .container {
+      max-width: 400px;
+      margin: auto;
+      background: #222;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px #0f0;
+    }
     input, button {
-      padding: 0.7rem;
       width: 100%;
-      max-width: 400px;
-      margin: 0.5rem 0;
-      border-radius: 8px;
-      font-size: 1rem;
+      padding: 10px;
+      margin: 10px 0;
       border: none;
+      border-radius: 8px;
+      font-size: 16px;
     }
-    input { background: #222; color: white; }
-    body.light-mode input { background: #eee; color: black; }
     button {
-      background: var(--accent-color);
-      color: black;
+      background: #0f0;
+      color: #000;
       font-weight: bold;
+      cursor: pointer;
     }
-    .tx {
-      background: #1e1e1e;
-      padding: 0.5rem;
-      margin: 0.3rem;
-      border-left: 5px solid var(--accent-color);
-    }
-    body.light-mode .tx { background: #ddd; }
-    #nfc-animation {
-      width: 80px;
-      height: 80px;
-      border-radius: 50%;
-      border: 4px solid var(--accent-color);
-      animation: pulse 1.5s infinite;
-      margin: 10px auto;
-    }
-    @keyframes pulse {
-      0% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.2); opacity: 0.6; }
-      100% { transform: scale(1); opacity: 1; }
-    }
-    #loginSection, #appSection {
-      display: none;
-      width: 100%;
-      max-width: 400px;
-    }
-    #logoutBtn {
-      margin-top: 1rem;
-      background: #ff1744;
-      color: white;
-    }
-    #balance { font-size: 1.2rem; margin: 1rem 0; color: var(--accent-color); }
-    #modeToggle {
-      background: transparent;
-      color: var(--accent-color);
-      border: 2px solid var(--accent-color);
+    #history {
+      margin-top: 20px;
+      background: #000;
+      padding: 10px;
+      border-radius: 8px;
     }
   </style>
 </head>
 <body>
-  <h1>📲 NFC P2P Payment</h1>
-  <button id="modeToggle" onclick="toggleMode()">🌓 Toggle Mode</button>
+  <div class="container">
+    <h2>NFC P2P Transfer</h2>
 
-  <div id="loginSection">
-    <input id="loginName" placeholder="Enter your name" />
-    <button onclick="loginUser()">🔐 Login</button>
+    <input type="text" id="username" placeholder="Your Username">
+    <button onclick="login()">Login</button>
+
+    <div id="dashboard" style="display:none">
+      <p>Welcome, <span id="userLabel"></span></p>
+      <p>Balance: ₹<span id="balance">0</span></p>
+
+      <input type="text" id="receiver" placeholder="Send to (Username)">
+      <input type="number" id="amount" placeholder="Amount ₹">
+      <button onclick="sendMoney()">Send Money</button>
+
+      <div id="history"><h4>History:</h4><ul id="txnList"></ul></div>
+    </div>
   </div>
-
-  <div id="appSection">
-    <input id="username" disabled />
-    <input id="receiver" placeholder="Send to (Name)" />
-    <input id="amount" type="number" placeholder="₹ Amount" />
-    <input id="pin" type="password" placeholder="Enter PIN (1234)" />
-    <button onclick="sendMoney()">💸 Send</button>
-    <div id="nfc-animation"></div>
-    <div id="balance"></div>
-    <button onclick="pairDevices()">🔗 Simulate NFC Pair</button>
-    <button id="logoutBtn" onclick="logoutUser()">🚪 Logout</button>
-    <h3>Transactions</h3>
-    <div id="transactions"></div>
-  </div>
-
-  <audio id="ding">
-    <source src="https://assets.mixkit.co/sfx/download/mixkit-correct-answer-reward-952.wav" type="audio/wav">
-  </audio>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-    import { getDatabase, ref, push, onChildAdded, set, get, update } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+    import { getDatabase, ref, get, set, update, child } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
@@ -119,133 +71,89 @@
       projectId: "nfc-3dd64",
       storageBucket: "nfc-3dd64.appspot.com",
       messagingSenderId: "536652690858",
-      appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3"
+      appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3",
+      measurementId: "G-K0QC8BKZB7"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    let currentUser = "";
 
-    const loginInput = document.getElementById("loginName");
-    const usernameInput = document.getElementById("username");
-    const receiverInput = document.getElementById("receiver");
-    const amountInput = document.getElementById("amount");
-    const pinInput = document.getElementById("pin");
-    const transactionsDiv = document.getElementById("transactions");
-    const dingSound = document.getElementById("ding");
-    const nfcAnim = document.getElementById("nfc-animation");
-    const balanceDisplay = document.getElementById("balance");
-    const loginSection = document.getElementById("loginSection");
-    const appSection = document.getElementById("appSection");
+    window.login = async function () {
+      const username = document.getElementById("username").value.trim();
+      if (!username) return alert("Enter username");
+      currentUser = username;
 
-    let currentUser = null;
-    let balance = 0;
+      const userRef = ref(db, 'users/' + username);
+      const snapshot = await get(userRef);
 
-    function loginUser() {
-      const name = loginInput.value.trim();
-      if (!name) return alert("Enter your name");
-      localStorage.setItem("nfcUser", name);
-      showApp();
-    }
-
-    function logoutUser() {
-      localStorage.removeItem("nfcUser");
-      window.location.reload();
-    }
-
-    async function showApp() {
-      const name = localStorage.getItem("nfcUser");
-      if (name) {
-        currentUser = name;
-        usernameInput.value = name;
-        loginSection.style.display = "none";
-        appSection.style.display = "block";
-
-        const userRef = ref(db, `users/${name}`);
-        const snapshot = await get(userRef);
-        if (!snapshot.exists()) {
-          await set(userRef, { balance: 100 });
-          balance = 100;
-        } else {
-          balance = snapshot.val().balance;
-        }
-        updateBalanceDisplay();
-      } else {
-        loginSection.style.display = "block";
-        appSection.style.display = "none";
-      }
-    }
-
-    function updateBalanceDisplay() {
-      balanceDisplay.innerText = `💰 Balance: ₹${balance.toFixed(2)}`;
-    }
-
-    async function sendMoney() {
-      const sender = usernameInput.value.trim();
-      const receiver = receiverInput.value.trim();
-      const amount = parseFloat(amountInput.value.trim());
-      const pin = pinInput.value.trim();
-
-      if (!sender || !receiver || !amount || amount <= 0 || !pin) return alert("Fill all fields");
-      if (pin !== "1234") return alert("❌ Wrong PIN");
-      if (amount > balance) return alert("❌ Insufficient balance");
-
-      const receiverRef = ref(db, `users/${receiver}`);
-      const receiverSnap = await get(receiverRef);
-      if (!receiverSnap.exists()) {
-        await set(receiverRef, { balance: 0 });
+      if (!snapshot.exists()) {
+        await set(userRef, { balance: 1000, history: [] });
       }
 
-      const updates = {};
-      updates[`users/${sender}/balance`] = balance - amount;
-      updates[`users/${receiver}/balance`] = (receiverSnap.val()?.balance || 0) + amount;
-      await update(ref(db), updates);
-
-      push(ref(db, "transactions"), { from: sender, to: receiver, amount, time: Date.now() });
-
-      amountInput.value = "";
-      balance -= amount;
-      updateBalanceDisplay();
+      document.getElementById("userLabel").textContent = username;
+      document.getElementById("dashboard").style.display = "block";
+      updateBalance();
+      loadHistory();
     }
 
-    onChildAdded(ref(db, "transactions"), (snapshot) => {
-      const tx = snapshot.val();
-      const user = localStorage.getItem("nfcUser");
-      if (!user || (tx.from !== user && tx.to !== user)) return;
+    async function updateBalance() {
+      const snap = await get(ref(db, 'users/' + currentUser));
+      document.getElementById("balance").textContent = snap.val().balance;
+    }
 
-      const div = document.createElement("div");
-      div.className = "tx";
-      div.innerText = `${tx.from} ➡ ${tx.to}: ₹${tx.amount}`;
-      transactionsDiv.prepend(div);
-
-      if (tx.to === user) {
-        dingSound.play();
-        nfcAnim.style.borderColor = "#00e676";
-        setTimeout(() => {
-          nfcAnim.style.borderColor = "var(--accent-color)";
-        }, 1500);
-      }
-    });
-
-    function pairDevices() {
-      if (!("NDEFReader" in window)) {
-        alert("NFC not supported in this browser. Use Chrome on Android.");
-        return;
-      }
-      const uuid = crypto.randomUUID();
-      const pairData = `${currentUser}-${uuid}`;
-      const writer = new NDEFWriter();
-      writer.write(pairData).then(() => {
-        alert(`📡 Pair info sent via NFC: ${pairData}`);
-      }).catch(err => {
-        alert("NFC failed: " + err);
+    async function loadHistory() {
+      const snap = await get(ref(db, 'users/' + currentUser + '/history'));
+      const history = snap.val() || [];
+      const list = document.getElementById("txnList");
+      list.innerHTML = "";
+      history.reverse().forEach(txn => {
+        const li = document.createElement("li");
+        li.textContent = txn;
+        list.appendChild(li);
       });
     }
 
-    function toggleMode() {
-      document.body.classList.toggle("light-mode");
-    }
+    window.sendMoney = async function () {
+      const receiver = document.getElementById("receiver").value.trim();
+      const amount = parseInt(document.getElementById("amount").value.trim());
+      if (!receiver || !amount) return alert("Enter all fields");
+      if (receiver === currentUser) return alert("Can't send to self");
 
-    showApp();
+      const senderRef = ref(db, 'users/' + currentUser);
+      const receiverRef = ref(db, 'users/' + receiver);
+
+      const senderSnap = await get(senderRef);
+      const receiverSnap = await get(receiverRef);
+
+      if (!receiverSnap.exists()) return alert("Receiver not found");
+
+      const senderData = senderSnap.val();
+      const receiverData = receiverSnap.val();
+
+      if (senderData.balance < amount) return alert("Insufficient balance");
+
+      const newSenderBal = senderData.balance - amount;
+      const newReceiverBal = receiverData.balance + amount;
+
+      const time = new Date().toLocaleString();
+      const txnSender = `- ₹${amount} to ${receiver} at ${time}`;
+      const txnReceiver = `+ ₹${amount} from ${currentUser} at ${time}`;
+
+      await update(senderRef, {
+        balance: newSenderBal,
+        history: [...(senderData.history || []), txnSender]
+      });
+
+      await update(receiverRef, {
+        balance: newReceiverBal,
+        history: [...(receiverData.history || []), txnReceiver]
+      });
+
+      updateBalance();
+      loadHistory();
+      alert("Money Sent!");
+    }
   </script>
 </body>
 </html>
