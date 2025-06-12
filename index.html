@@ -1,237 +1,181 @@
 <!DOCTYPE html><html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NFC Payment UI</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NFC P2P Payment (Simulated)</title>
   <style>
-    :root {
-      --bg-color: #4b2cff;
-      --card-bg: rgba(255, 255, 255, 0.05);
-      --text-color: white;
-      --input-bg: white;
-      --button-bg: #ffffff10;
-      --button-border: #ffffff50;
-    }
-    body.light {
-      --bg-color: #f0f0f0;
-      --card-bg: white;
-      --text-color: #222;
-      --input-bg: #eee;
-      --button-bg: #ddd;
-      --button-border: #bbb;
-    }
     body {
+      font-family: 'Poppins', sans-serif;
       margin: 0;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: var(--bg-color);
-      color: var(--text-color);
+      padding: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
+      background: #f0f0f0;
       height: 100vh;
-      padding: 16px;
-      transition: all 0.3s ease;
     }
-    .hidden { display: none; }
-    .card {
-      background: var(--card-bg);
-      border-radius: 20px;
-      padding: 24px;
+    .dark {
+      background: #111;
+      color: #eee;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      padding: 1rem;
+      background: #6200ee;
+      color: white;
+    }
+    #auth, #main {
+      padding: 2rem;
+      text-align: center;
       width: 90%;
       max-width: 400px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-      text-align: center;
-      transition: transform 0.3s ease;
     }
-    .card h2 {
-      margin: 0 0 16px;
+    #card {
+      background: white;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-radius: 1rem;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
-    .input {
+    #fakeCard {
+      font-size: 3rem;
+      animation: slide-in 0.8s ease;
+    }
+    input, button {
+      display: block;
       width: 100%;
-      padding: 12px;
-      margin: 12px 0;
-      border: none;
-      background: var(--input-bg);
-      border-radius: 10px;
-      font-size: 16px;
+      margin: 0.5rem 0;
+      padding: 0.8rem;
+      border-radius: 0.5rem;
+      border: 1px solid #ccc;
     }
-    .btn {
-      width: 100%;
-      background: var(--button-bg);
-      border: 2px solid var(--button-border);
-      padding: 12px;
-      color: var(--text-color);
+    button {
+      background: #03dac6;
+      color: black;
       font-weight: bold;
-      border-radius: 10px;
-      font-size: 16px;
-      margin-top: 16px;
-      cursor: pointer;
+      border: none;
     }
-    .btn:hover {
-      opacity: 0.9;
+    ul {
+      list-style: none;
+      padding: 0;
     }
-    .nfc-animation, .receiver-animation {
-      margin-top: 20px;
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      border: 4px solid var(--text-color);
-      animation: pulse 2s infinite ease-in-out;
-      margin-left: auto;
-      margin-right: auto;
+    li {
+      margin: 0.2rem 0;
+      padding: 0.5rem;
+      background: #ddd;
+      border-radius: 0.3rem;
     }
-    @keyframes pulse {
-      0% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.2); opacity: 0.6; }
-      100% { transform: scale(1); opacity: 1; }
-    }
-    .slide-card {
-      width: 100%;
-      background: linear-gradient(to right, #7f00ff, #e100ff);
-      color: white;
-      padding: 16px;
-      border-radius: 15px;
-      margin-top: 20px;
-      animation: slideUp 1s ease-out forwards;
-    }
-    @keyframes slideUp {
-      to { transform: translateY(0); }
-    }
-    #transactions {
-      text-align: left;
-      margin-top: 20px;
-      font-size: 14px;
-    }
-    .toggle-mode {
-      position: absolute;
-      top: 16px;
-      right: 16px;
-      font-size: 12px;
-      cursor: pointer;
-      padding: 6px 10px;
-      background: var(--button-bg);
-      border: 1px solid var(--button-border);
-      border-radius: 8px;
-    }
-    .logout-btn {
-      position: absolute;
-      top: 16px;
-      left: 16px;
-      font-size: 12px;
-      cursor: pointer;
-      padding: 6px 10px;
-      background: var(--button-bg);
-      border: 1px solid var(--button-border);
-      border-radius: 8px;
+    .hidden { display: none; }
+    @keyframes slide-in {
+      from { transform: translateX(-100px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
     }
   </style>
 </head>
 <body>
-  <div class="toggle-mode" onclick="toggleMode()">🌙 Toggle Mode</div>
-  <div class="logout-btn hidden" id="logoutBtn" onclick="logoutUser()">🚪 Logout</div>  <div class="card" id="loginCard">
-    <h2>🔐 Login/Register</h2>
-    <input class="input" type="text" id="username" placeholder="Enter username">
-    <button class="btn" onclick="loginUser()">Login / Register</button>
-  </div>  <div class="card hidden" id="mainApp">
-    <h2>💳 NFC P2P Payment (India Only)</h2>
-    <div class="slide-card">
-      <h3>Visa Platinum</h3>
-      <p>•••• •••• •••• 5610</p>
-    </div>
-    <input class="input" type="number" id="amount" placeholder="Enter amount to send" />
-    <button class="btn" onclick="simulatePay()">Tap & Pay</button>
-    <div class="nfc-animation" id="nfcAnim" style="display:none;"></div>
-    <div class="receiver-animation" id="receiverAnim" style="display:none; background: green;"></div>
-    <p id="statusText" style="margin-top: 16px;"></p>
-    <div id="transactions"></div>
-    <input class="input" type="text" id="newUsername" placeholder="Change username" />
-    <button class="btn" onclick="changeUsername()">Update Username</button>
-  </div>  <audio id="successSound">
-    <source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_9b4f528b57.mp3?filename=success-1-6297.mp3" type="audio/mp3">
-  </audio>  <script>
-    function loginUser() {
-      const user = document.getElementById("username").value.trim();
-      if (!user) return alert("Enter username");
-      localStorage.setItem("nfc_user", user);
-      document.getElementById("loginCard").classList.add("hidden");
-      document.getElementById("mainApp").classList.remove("hidden");
-      document.getElementById("logoutBtn").classList.remove("hidden");
-      showTransactions();
-    }
+  <div id="app" class="light">
+    <header>
+      <h1>NFC Pay (Demo)</h1>
+      <button id="modeToggle">🌙</button>
+    </header><section id="auth">
+  <input type="text" id="username" placeholder="Enter username" />
+  <button id="loginBtn">Login</button>
+</section>
 
-    function logoutUser() {
-      localStorage.removeItem("nfc_user");
-      document.getElementById("mainApp").classList.add("hidden");
-      document.getElementById("loginCard").classList.remove("hidden");
-      document.getElementById("logoutBtn").classList.add("hidden");
-    }
+<section id="main" class="hidden">
+  <div id="card">
+    <div id="fakeCard">💳</div>
+    <input type="number" id="amount" placeholder="Enter ₹ amount" />
+    <button id="sendBtn">Send</button>
+  </div>
+  <p id="receiverMsg"></p>
+  <p>Balance: ₹<span id="balance">0</span></p>
+  <button id="logoutBtn">Logout</button>
 
-    function changeUsername() {
-      const newUser = document.getElementById("newUsername").value.trim();
-      if (!newUser) return alert("Enter new username");
-      localStorage.setItem("nfc_user", newUser);
-      alert("Username updated to " + newUser);
-    }
+  <h3>Transaction History</h3>
+  <ul id="history"></ul>
+</section>
 
-    function simulatePay() {
-      const user = localStorage.getItem("nfc_user");
-      const amount = document.getElementById('amount').value;
-      if (!amount || amount <= 0) {
-        alert("Please enter a valid amount");
-        return;
-      }
-      document.getElementById('nfcAnim').style.display = 'block';
-      document.getElementById('statusText').innerText = 'Waiting for receiver...';
-      setTimeout(() => {
-        document.getElementById('nfcAnim').style.display = 'none';
-        document.getElementById('receiverAnim').style.display = 'block';
-        setTimeout(() => {
-          document.getElementById('receiverAnim').style.display = 'none';
-          const timestamp = new Date().toLocaleTimeString();
-          const msg = `✅ ₹${amount} sent by ${user} at ${timestamp}`;
-          document.getElementById('statusText').innerText = msg;
-          document.getElementById('successSound').play();
+<audio id="successSound" src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3"></audio>
 
-          const txns = JSON.parse(localStorage.getItem("nfc_txns") || "[]");
-          txns.unshift(msg);
-          localStorage.setItem("nfc_txns", JSON.stringify(txns));
-          showTransactions();
-        }, 1200);
-      }, 2000);
-    }
+  </div>
+  <script>
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const usernameInput = document.getElementById("username");
+    const authSection = document.getElementById("auth");
+    const mainSection = document.getElementById("main");
+    const balanceSpan = document.getElementById("balance");
+    const amountInput = document.getElementById("amount");
+    const sendBtn = document.getElementById("sendBtn");
+    const receiverMsg = document.getElementById("receiverMsg");
+    const historyList = document.getElementById("history");
+    const modeToggle = document.getElementById("modeToggle");
+    const successSound = document.getElementById("successSound");let currentUser = null;
+let data = JSON.parse(localStorage.getItem("nfc_users")) || {};
 
-    function showTransactions() {
-      const txns = JSON.parse(localStorage.getItem("nfc_txns") || "[]");
-      document.getElementById("transactions").innerHTML = `
-        <h4>History</h4>
-        <ul>
-          ${txns.slice(0, 5).map(t => `<li>${t}</li>`).join('')}
-        </ul>
-      `;
-    }
+function saveData() {
+  localStorage.setItem("nfc_users", JSON.stringify(data));
+}
 
-    function toggleMode() {
-      document.body.classList.toggle("light");
-    }
+loginBtn.onclick = () => {
+  const user = usernameInput.value.trim();
+  if (!user) return alert("Enter username");
+  if (!data[user]) {
+    data[user] = { balance: 0, history: [] };
+    saveData();
+  }
+  currentUser = user;
+  showMain();
+};
 
-    document.addEventListener("touchstart", function(e) {
-      this.startX = e.touches[0].clientX;
-    });
-    document.addEventListener("touchmove", function(e) {
-      const deltaX = e.touches[0].clientX - this.startX;
-      document.getElementById("mainApp").style.transform = `rotateY(${deltaX * 0.05}deg)`;
-    });
-    document.addEventListener("touchend", function() {
-      document.getElementById("mainApp").style.transform = `rotateY(0deg)`;
-    });
+logoutBtn.onclick = () => {
+  currentUser = null;
+  showAuth();
+};
 
-    const savedUser = localStorage.getItem("nfc_user");
-    if (savedUser) {
-      document.getElementById("loginCard").classList.add("hidden");
-      document.getElementById("mainApp").classList.remove("hidden");
-      document.getElementById("logoutBtn").classList.remove("hidden");
-      showTransactions();
-    }
-  </script></body>
+sendBtn.onclick = () => {
+  const amt = parseInt(amountInput.value);
+  if (!amt || amt <= 0) return alert("Enter valid ₹ amount");
+
+  data[currentUser].balance += amt;
+  const entry = `Sent ₹${amt} at ${new Date().toLocaleTimeString()}`;
+  data[currentUser].history.unshift(entry);
+  saveData();
+  render();
+
+  receiverMsg.innerText = `👨‍💻 Receiver got ₹${amt}!`;
+  successSound.play();
+  amountInput.value = "";
+};
+
+modeToggle.onclick = () => {
+  document.getElementById("app").classList.toggle("dark");
+  document.getElementById("app").classList.toggle("light");
+};
+
+function render() {
+  const u = data[currentUser];
+  balanceSpan.innerText = u.balance;
+  historyList.innerHTML = u.history.map(h => `<li>${h}</li>`).join("");
+}
+
+function showMain() {
+  authSection.classList.add("hidden");
+  mainSection.classList.remove("hidden");
+  render();
+}
+
+function showAuth() {
+  authSection.classList.remove("hidden");
+  mainSection.classList.add("hidden");
+}
+
+if (currentUser) showMain();
+
+  </script>
+</body>
 </html>
