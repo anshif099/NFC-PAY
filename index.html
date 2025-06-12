@@ -5,9 +5,7 @@
   <title>Simulated NFC P2P Payment</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: 'Inter', sans-serif;
@@ -26,23 +24,8 @@
       max-width: 400px;
       width: 100%;
       text-align: center;
-      animation: fadeIn 1s ease-in-out;
       position: relative;
       overflow: hidden;
-    }
-    .icon-circle {
-      background: #cfe3f9;
-      border-radius: 50%;
-      width: 64px;
-      height: 64px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin: 0 auto 16px;
-      animation: pop 0.5s ease-in-out;
-    }
-    .icon-circle svg {
-      color: #2563eb;
     }
     .input {
       width: 100%;
@@ -62,135 +45,91 @@
       font-size: 16px;
       margin-top: 16px;
       cursor: pointer;
-      transition: transform 0.2s;
-    }
-    .btn:hover {
-      background-color: #1e40af;
-      transform: scale(1.03);
     }
     .success {
       background-color: #d1fae5;
       border-radius: 8px;
       padding: 16px;
       margin-top: 16px;
-      animation: slideUp 0.6s ease-out;
     }
-    .success svg {
-      color: #10b981;
-      margin-bottom: 8px;
-      animation: pop 0.3s ease-in-out;
-    }
-    .nfc-scan {
-      margin-top: 16px;
-      display: flex;
-      justify-content: space-around;
-      align-items: center;
-      animation: fadeIn 0.5s ease-in-out;
-    }
-    .nfc-device {
-      width: 50px;
-      height: 50px;
-      background-color: #2563eb;
-      border-radius: 50%;
-      position: relative;
-    }
-    .nfc-wave {
-      position: absolute;
-      width: 50px;
-      height: 50px;
-      border: 3px solid #3b82f6;
-      border-radius: 50%;
-      top: 0;
-      left: 0;
-      animation: wave 1.2s ease-out infinite;
-    }
-    @keyframes wave {
-      0% {
-        transform: scale(1);
-        opacity: 1;
-      }
-      100% {
-        transform: scale(2);
-        opacity: 0;
-      }
-    }
-    .fake-card {
-      width: 300px;
-      height: 180px;
-      background: linear-gradient(to right, #4f46e5, #3b82f6);
-      color: white;
-      border-radius: 16px;
-      padding: 16px;
-      margin: 16px auto;
-      transform: translateX(-120%);
-      animation: slideCard 1s ease-out forwards;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: scale(0.95); }
-      to { opacity: 1; transform: scale(1); }
-    }
-    @keyframes pop {
-      0% { transform: scale(0); }
-      80% { transform: scale(1.1); }
-      100% { transform: scale(1); }
-    }
-    @keyframes slideUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes slideCard {
-      to { transform: translateX(0); }
+    .cart {
+      margin-top: 20px;
+      background: #f9f9f9;
+      padding: 12px;
+      border-radius: 8px;
+      text-align: left;
     }
   </style>
 </head>
 <body>
-  <audio id="successSound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_f8f14c91cb.mp3?filename=success-1-6297.mp3"></audio>  <div class="card">
-    <div class="icon-circle">
-      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12H3m0 0l5-5m-5 5l5 5" />
-      </svg>
-    </div>
-    <h2>Simulated NFC P2P Payment</h2>
-    <p>Phone-to-phone simulated transfer with NFC style</p><div class="fake-card">
-  <h3>VISA</h3>
-  <p>**** **** **** 1234</p>
-  <p>Valid Thru: 12/29</p>
-</div>
-
-<input class="input" type="text" id="sender" placeholder="Your Name" />
-<input class="input" type="text" id="receiver" placeholder="Receiver Name" />
-<input class="input" type="number" id="amount" placeholder="Amount (₹)" />
-<button class="btn" onclick="simulatePayment()">Tap to Pay (Simulate NFC)</button>
-
-<div class="nfc-scan">
-  <div class="nfc-device"><div class="nfc-wave"></div></div>
-  <div class="nfc-device"><div class="nfc-wave"></div></div>
-</div>
-
-<div id="result"></div>
-
+  <div class="card" id="authCard">
+    <h2>User Login / Register</h2>
+    <input class="input" type="text" id="regUsername" placeholder="Username">
+    <input class="input" type="password" id="regPassword" placeholder="Password">
+    <button class="btn" onclick="registerUser()">Register</button>
+    <button class="btn" onclick="loginUser()">Login</button>
+  </div>  <div class="card" id="mainApp" style="display:none">
+    <h2>Welcome, <span id="welcomeUser"></span></h2>
+    <input class="input" type="text" id="itemName" placeholder="Item to add to cart">
+    <button class="btn" onclick="addToCart()">Add to Cart</button>
+    <div class="cart" id="cartList"></div>
+    <button class="btn" onclick="logout()">Logout</button>
   </div>  <script>
-    function simulatePayment() {
-      const sender = document.getElementById("sender").value;
-      const receiver = document.getElementById("receiver").value;
-      const amount = document.getElementById("amount").value;
-      const result = document.getElementById("result");
-      const sound = document.getElementById("successSound");
-
-      if (sender && receiver && amount) {
-        result.innerHTML = `
-          <div class="success">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2l4 -4" />
-            </svg>
-            <p><strong>Payment Successful!</strong></p>
-            <p>${sender} paid ₹${amount} to ${receiver}</p>
-          </div>
-        `;
-        sound.play();
+    function registerUser() {
+      const user = document.getElementById('regUsername').value;
+      const pass = document.getElementById('regPassword').value;
+      if(user && pass) {
+        localStorage.setItem(user, pass);
+        alert('User registered. You can now login.');
       } else {
-        alert("Please fill all fields.");
+        alert('Please enter both username and password.');
       }
     }
+
+    function loginUser() {
+      const user = document.getElementById('regUsername').value;
+      const pass = document.getElementById('regPassword').value;
+      const storedPass = localStorage.getItem(user);
+      if(pass === storedPass) {
+        localStorage.setItem('currentUser', user);
+        showMainApp(user);
+      } else {
+        alert('Invalid login. Try again.');
+      }
+    }
+
+    function showMainApp(user) {
+      document.getElementById('authCard').style.display = 'none';
+      document.getElementById('mainApp').style.display = 'block';
+      document.getElementById('welcomeUser').textContent = user;
+      loadCart();
+    }
+
+    function addToCart() {
+      const item = document.getElementById('itemName').value;
+      const user = localStorage.getItem('currentUser');
+      let cart = JSON.parse(localStorage.getItem(user + '_cart')) || [];
+      if(item) {
+        cart.push(item);
+        localStorage.setItem(user + '_cart', JSON.stringify(cart));
+        loadCart();
+      }
+    }
+
+    function loadCart() {
+      const user = localStorage.getItem('currentUser');
+      const cart = JSON.parse(localStorage.getItem(user + '_cart')) || [];
+      document.getElementById('cartList').innerHTML = cart.map(i => `<li>${i}</li>`).join('');
+    }
+
+    function logout() {
+      localStorage.removeItem('currentUser');
+      document.getElementById('authCard').style.display = 'block';
+      document.getElementById('mainApp').style.display = 'none';
+    }
+
+    // Auto-login if already stored
+    const currentUser = localStorage.getItem('currentUser');
+    if(currentUser) showMainApp(currentUser);
   </script></body>
 </html>
