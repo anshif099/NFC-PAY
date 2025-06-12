@@ -1,7 +1,8 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>NFC P2P Payment</title>
   <style>
     :root {
@@ -82,10 +83,14 @@
 </head>
 <body>
   <h1>📲 NFC P2P Payment</h1>
-  <button id="modeToggle" onclick="toggleMode()">🌓 Toggle Mode</button>  <div id="loginSection">
+  <button id="modeToggle" onclick="toggleMode()">🌓 Toggle Mode</button>
+
+  <div id="loginSection">
     <input id="loginName" placeholder="Enter your name" />
     <button onclick="loginUser()">🔐 Login</button>
-  </div>  <div id="appSection">
+  </div>
+
+  <div id="appSection">
     <input id="username" disabled />
     <input id="receiver" placeholder="Send to (Name)" />
     <input id="amount" type="number" placeholder="₹ Amount" />
@@ -97,11 +102,15 @@
     <button id="logoutBtn" onclick="logoutUser()">🚪 Logout</button>
     <h3>Transactions</h3>
     <div id="transactions"></div>
-  </div>  <audio id="ding">
+  </div>
+
+  <audio id="ding">
     <source src="https://assets.mixkit.co/sfx/download/mixkit-correct-answer-reward-952.wav" type="audio/wav">
-  </audio>  <script type="module">
+  </audio>
+
+  <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-    import { getDatabase, ref, push, onChildAdded, set, get, child, update } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+    import { getDatabase, ref, push, onChildAdded, set, get, update } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
@@ -110,8 +119,7 @@
       projectId: "nfc-3dd64",
       storageBucket: "nfc-3dd64.appspot.com",
       messagingSenderId: "536652690858",
-      appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3",
-      measurementId: "G-K0QC8BKZB7"
+      appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3"
     };
 
     const app = initializeApp(firebaseConfig);
@@ -155,12 +163,15 @@
         const userRef = ref(db, `users/${name}`);
         const snapshot = await get(userRef);
         if (!snapshot.exists()) {
-          await set(userRef, { balance: 100 }); // ₹100 default
+          await set(userRef, { balance: 100 });
           balance = 100;
         } else {
           balance = snapshot.val().balance;
         }
         updateBalanceDisplay();
+      } else {
+        loginSection.style.display = "block";
+        appSection.style.display = "none";
       }
     }
 
@@ -184,13 +195,11 @@
         await set(receiverRef, { balance: 0 });
       }
 
-      // Update balances
       const updates = {};
       updates[`users/${sender}/balance`] = balance - amount;
       updates[`users/${receiver}/balance`] = (receiverSnap.val()?.balance || 0) + amount;
       await update(ref(db), updates);
 
-      // Push transaction
       push(ref(db, "transactions"), { from: sender, to: receiver, amount, time: Date.now() });
 
       amountInput.value = "";
@@ -201,9 +210,7 @@
     onChildAdded(ref(db, "transactions"), (snapshot) => {
       const tx = snapshot.val();
       const user = localStorage.getItem("nfcUser");
-      if (!user) return;
-
-      if (tx.from !== user && tx.to !== user) return;
+      if (!user || (tx.from !== user && tx.to !== user)) return;
 
       const div = document.createElement("div");
       div.className = "tx";
@@ -239,5 +246,6 @@
     }
 
     showApp();
-  </script></body>
+  </script>
+</body>
 </html>
