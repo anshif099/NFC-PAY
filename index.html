@@ -1,174 +1,210 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>NFC Money Transfer</title>
+  <meta charset="UTF-8">
+  <title>NFC P2P Pay</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
-      background: #111;
-      color: #fff;
-      font-family: Arial, sans-serif;
+      background: #121212;
+      color: white;
+      font-family: Arial;
       padding: 20px;
     }
     .container {
-      max-width: 400px;
+      max-width: 420px;
       margin: auto;
-      background: #222;
       padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 0 10px #0f0;
+      background: #1f1f1f;
+      border-radius: 15px;
+      box-shadow: 0 0 15px #00ff88;
     }
     input, button {
       width: 100%;
-      padding: 10px;
-      margin: 10px 0;
+      padding: 12px;
+      margin-top: 10px;
       border: none;
       border-radius: 8px;
       font-size: 16px;
     }
     button {
-      background: #0f0;
-      color: #000;
+      background: #00ff88;
       font-weight: bold;
-      cursor: pointer;
+      color: black;
     }
-    #history {
-      margin-top: 20px;
-      background: #000;
+    #dashboard { display: none; }
+    #pairCodeDisplay {
+      margin-top: 10px;
+      font-size: 14px;
+      background: black;
       padding: 10px;
-      border-radius: 8px;
+      border-radius: 10px;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>NFC P2P Transfer</h2>
 
-    <input type="text" id="username" placeholder="Your Username">
-    <button onclick="login()">Login</button>
+<div class="container">
+  <h2>NFC P2P Payment</h2>
+  <input id="username" placeholder="Enter your username">
+  <button onclick="login()">Login</button>
 
-    <div id="dashboard" style="display:none">
-      <p>Welcome, <span id="userLabel"></span></p>
-      <p>Balance: ₹<span id="balance">0</span></p>
+  <div id="dashboard">
+    <p>Welcome, <span id="userLabel"></span></p>
+    <p>Balance: ₹<span id="balance">0</span></p>
 
-      <input type="text" id="receiver" placeholder="Send to (Username)">
-      <input type="number" id="amount" placeholder="Amount ₹">
-      <button onclick="sendMoney()">Send Money</button>
+    <hr>
+    <h3>Receive Money</h3>
+    <div id="pairCodeDisplay">Waiting for tag...</div>
+    <button onclick="generatePairCode()">Generate Pair Code</button>
 
-      <div id="history"><h4>History:</h4><ul id="txnList"></ul></div>
-    </div>
+    <hr>
+    <h3>Send Money</h3>
+    <input id="nfcTagData" placeholder="Scan NFC or paste pairing code">
+    <input id="amount" placeholder="Amount ₹" type="number">
+    <button onclick="startNFC()">🔍 Scan NFC</button>
+    <button onclick="sendMoney()">💸 Send Money</button>
+
+    <h4>History</h4>
+    <ul id="txnList"></ul>
   </div>
+</div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-    import { getDatabase, ref, get, set, update, onValue } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+  import {
+    getDatabase, ref, set, update, get, onValue
+  } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
-      authDomain: "nfc-3dd64.firebaseapp.com",
-      databaseURL: "https://nfc-3dd64-default-rtdb.firebaseio.com",
-      projectId: "nfc-3dd64",
-      storageBucket: "nfc-3dd64.appspot.com",
-      messagingSenderId: "536652690858",
-      appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3",
-      measurementId: "G-K0QC8BKZB7"
-    };
+  const firebaseConfig = {
+    apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
+    authDomain: "nfc-3dd64.firebaseapp.com",
+    databaseURL: "https://nfc-3dd64-default-rtdb.firebaseio.com",
+    projectId: "nfc-3dd64",
+    storageBucket: "nfc-3dd64.appspot.com",
+    messagingSenderId: "536652690858",
+    appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3"
+  };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    let currentUser = "";
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  let currentUser = "";
 
-    window.login = async function () {
-      const username = document.getElementById("username").value.trim();
-      if (!username) return alert("Enter username");
-      currentUser = username;
+  window.login = async function () {
+    const username = document.getElementById("username").value.trim();
+    if (!username) return alert("Enter username");
+    currentUser = username;
 
-      const hasNFC = "nfc" in navigator;
+    const hasNFC = "nfc" in navigator;
+    const userRef = ref(db, 'users/' + username);
+    const snap = await get(userRef);
 
-      const userRef = ref(db, 'users/' + username);
-      const snapshot = await get(userRef);
-
-      if (!snapshot.exists()) {
-        await set(userRef, { balance: 1000, nfc: hasNFC, online: true, history: [] });
-      } else {
-        await update(userRef, { nfc: hasNFC, online: true });
-      }
-
-      document.getElementById("userLabel").textContent = username;
-      document.getElementById("dashboard").style.display = "block";
-      updateBalance();
-      loadHistory();
-
-      onValue(ref(db, 'users/' + username + '/history'), () => loadHistory());
+    if (!snap.exists()) {
+      await set(userRef, { balance: 1000, nfc: hasNFC, online: true, history: [] });
+    } else {
+      await update(userRef, { nfc: hasNFC, online: true });
     }
 
-    async function updateBalance() {
-      const snap = await get(ref(db, 'users/' + currentUser));
-      document.getElementById("balance").textContent = snap.val().balance;
-    }
+    document.getElementById("dashboard").style.display = "block";
+    document.getElementById("userLabel").innerText = username;
+    updateBalance();
+    loadHistory();
+    onValue(ref(db, 'users/' + username + '/history'), () => loadHistory());
+  }
 
-    async function loadHistory() {
-      const snap = await get(ref(db, 'users/' + currentUser + '/history'));
-      const history = snap.val() || [];
-      const list = document.getElementById("txnList");
-      list.innerHTML = "";
-      history.reverse().forEach(txn => {
-        const li = document.createElement("li");
-        li.textContent = txn;
-        list.appendChild(li);
-      });
-    }
+  async function updateBalance() {
+    const snap = await get(ref(db, 'users/' + currentUser));
+    document.getElementById("balance").innerText = snap.val().balance;
+  }
 
-    window.sendMoney = async function () {
-      const receiver = document.getElementById("receiver").value.trim();
-      const amount = parseInt(document.getElementById("amount").value.trim());
-      if (!receiver || !amount) return alert("Enter all fields");
-      if (receiver === currentUser) return alert("Can't send to self");
-
-      const senderRef = ref(db, 'users/' + currentUser);
-      const receiverRef = ref(db, 'users/' + receiver);
-
-      const [senderSnap, receiverSnap] = await Promise.all([
-        get(senderRef),
-        get(receiverRef)
-      ]);
-
-      if (!receiverSnap.exists()) return alert("Receiver not found");
-
-      const senderData = senderSnap.val();
-      const receiverData = receiverSnap.val();
-
-      if (!receiverData.nfc) return alert("Receiver does not support NFC");
-      if (!receiverData.online) return alert("Receiver is offline");
-      if (senderData.balance < amount) return alert("Insufficient balance");
-
-      const newSenderBal = senderData.balance - amount;
-      const newReceiverBal = receiverData.balance + amount;
-
-      const time = new Date().toLocaleString();
-      const txnSender = `- ₹${amount} to ${receiver} at ${time}`;
-      const txnReceiver = `+ ₹${amount} from ${currentUser} at ${time}`;
-
-      await update(senderRef, {
-        balance: newSenderBal,
-        history: [...(senderData.history || []), txnSender]
-      });
-
-      await update(receiverRef, {
-        balance: newReceiverBal,
-        history: [...(receiverData.history || []), txnReceiver]
-      });
-
-      updateBalance();
-      alert("Money Sent!");
-    }
-
-    window.addEventListener("beforeunload", () => {
-      if (currentUser) {
-        update(ref(db, 'users/' + currentUser), { online: false });
-      }
+  async function loadHistory() {
+    const snap = await get(ref(db, 'users/' + currentUser + '/history'));
+    const history = snap.val() || [];
+    const list = document.getElementById("txnList");
+    list.innerHTML = "";
+    history.slice().reverse().forEach(txn => {
+      const li = document.createElement("li");
+      li.innerText = txn;
+      list.appendChild(li);
     });
-  </script>
+  }
+
+  // Generate a unique code and display
+  window.generatePairCode = async function () {
+    const code = `${currentUser}#${Date.now()}`;
+    document.getElementById("pairCodeDisplay").innerText = code;
+    await update(ref(db, 'users/' + currentUser), { pairCode: code });
+  }
+
+  // Send money only if pairing code matches
+  window.sendMoney = async function () {
+    const tagData = document.getElementById("nfcTagData").value.trim();
+    const amount = parseInt(document.getElementById("amount").value.trim());
+    if (!tagData || !amount) return alert("Fill all fields");
+
+    const [receiver, timestamp] = tagData.split("#");
+    if (!receiver || !timestamp) return alert("Invalid pairing code");
+
+    const receiverRef = ref(db, 'users/' + receiver);
+    const receiverSnap = await get(receiverRef);
+    if (!receiverSnap.exists()) return alert("Receiver not found");
+
+    const receiverData = receiverSnap.val();
+    if (receiverData.pairCode !== tagData) return alert("NFC pairing failed");
+
+    const senderSnap = await get(ref(db, 'users/' + currentUser));
+    const senderData = senderSnap.val();
+    if (senderData.balance < amount) return alert("Insufficient funds");
+
+    // Update balances
+    const now = new Date().toLocaleString();
+    const txnSender = `- ₹${amount} to ${receiver} at ${now}`;
+    const txnReceiver = `+ ₹${amount} from ${currentUser} at ${now}`;
+
+    await update(ref(db, 'users/' + currentUser), {
+      balance: senderData.balance - amount,
+      history: [...(senderData.history || []), txnSender]
+    });
+
+    await update(receiverRef, {
+      balance: receiverData.balance + amount,
+      history: [...(receiverData.history || []), txnReceiver]
+    });
+
+    alert("Money sent!");
+    updateBalance();
+  }
+
+  // NFC Scan
+  window.startNFC = async function () {
+    if (!("nfc" in navigator)) {
+      return alert("NFC not supported on this device.");
+    }
+
+    try {
+      const reader = new NDEFReader();
+      await reader.scan();
+      reader.onreading = event => {
+        const decoder = new TextDecoder();
+        for (const record of event.message.records) {
+          if (record.recordType === "text") {
+            const tag = decoder.decode(record.data);
+            document.getElementById("nfcTagData").value = tag;
+            alert("NFC Tag Read: " + tag);
+          }
+        }
+      };
+    } catch (err) {
+      alert("NFC scan failed: " + err);
+    }
+  }
+
+  window.addEventListener("beforeunload", () => {
+    if (currentUser) {
+      update(ref(db, 'users/' + currentUser), { online: false });
+    }
+  });
+</script>
+
 </body>
 </html>
