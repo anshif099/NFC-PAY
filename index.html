@@ -2,70 +2,107 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>NFC ₹100 Pay</title>
+  <title>NFC Pay + Bonus</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <script defer src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-  <script defer src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
   <style>
     body {
-      background: #121212;
-      color: white;
+      background: #111;
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
       text-align: center;
-      font-family: sans-serif;
-      padding-top: 100px;
+      padding: 30px;
+    }
+    input, button {
+      padding: 10px;
+      font-size: 16px;
+      margin: 10px;
     }
     .card {
-      background: #1f1f1f;
-      border-radius: 16px;
-      padding: 30px;
-      margin: 20px;
-      box-shadow: 0 0 20px rgba(0,255,0,0.2);
-      transition: 0.3s;
-    }
-    .card:hover {
-      transform: scale(1.02);
+      background: #222;
+      padding: 20px;
+      margin: 20px auto;
+      border-radius: 15px;
+      width: 90%;
+      max-width: 400px;
+      box-shadow: 0 0 10px rgba(0,255,0,0.2);
     }
   </style>
 </head>
 <body>
-  <h1>Tap to Pay ₹100</h1>
-  <div class="card">
-    <p>Tap your phone to receiver</p>
-    <p>Auto transferring ₹100...</p>
+  <h2>NFC ₹100 Tap & Pay</h2>
+
+  <div class="card" id="loginCard">
+    <h3>Login</h3>
+    <input id="userID" placeholder="Enter your ID" />
+    <button onclick="login()">Login & Get ₹100 Bonus</button>
+  </div>
+
+  <div class="card" id="mainCard" style="display:none;">
+    <h3>Welcome, <span id="showUser"></span></h3>
+    <p>Your Balance: ₹<span id="balance">0</span></p>
+    <p id="status">Tap another phone to send ₹100...</p>
+    <button onclick="writeNFC()">Write My ID to NFC (optional)</button>
   </div>
 
   <script>
-    // ✅ Your Firebase Project
     const firebaseConfig = {
       apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
       authDomain: "nfc-3dd64.firebaseapp.com",
-      databaseURL: "https://nfc-3dd64-default-rtdb.firebaseio.com",
       projectId: "nfc-3dd64",
-      storageBucket: "nfc-3dd64.appspot.com",
-      messagingSenderId: "536652690858",
-      appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    const senderID = "user1"; // Change to logged-in user if needed
-    const amount = 100;
+    let currentUserID = "";
+
+    async function login() {
+      const id = document.getElementById("userID").value.trim();
+      if (!id) return alert("Please enter a valid ID");
+
+      const userRef = db.collection("users").doc(id);
+      const doc = await userRef.get();
+
+      if (!doc.exists) {
+        await userRef.set({ balance: 100 });
+        alert("🎁 ₹100 bonus added!");
+      } else {
+        alert("✅ Logged in!");
+      }
+
+      currentUserID = id;
+      document.getElementById("showUser").innerText = id;
+      document.getElementById("loginCard").style.display = "none";
+      document.getElementById("mainCard").style.display = "block";
+      updateBalance();
+      startNFC();
+    }
+
+    async function updateBalance() {
+      const doc = await db.collection("users").doc(currentUserID).get();
+      const bal = doc.exists ? doc.data().balance : 0;
+      document.getElementById("balance").innerText = bal;
+    }
 
     async function startNFC() {
       if ('NDEFReader' in window) {
         const ndef = new NDEFReader();
         try {
           await ndef.scan();
-          console.log("NFC scan started");
+          document.getElementById("status").innerText = "📲 NFC ready. Tap another phone.";
 
           ndef.onreading = async (event) => {
             const decoder = new TextDecoder();
             const receiverID = decoder.decode(event.message.records[0].data);
-            console.log("Receiver ID:", receiverID);
 
-            const senderRef = db.collection("users").doc(senderID);
+            if (receiverID === currentUserID) {
+              alert("❌ Cannot send to yourself.");
+              return;
+            }
+
+            const senderRef = db.collection("users").doc(currentUserID);
             const receiverRef = db.collection("users").doc(receiverID);
-
             const [senderDoc, receiverDoc] = await Promise.all([
               senderRef.get(),
               receiverRef.get()
@@ -74,25 +111,40 @@
             const senderBal = senderDoc.exists ? senderDoc.data().balance : 0;
             const receiverBal = receiverDoc.exists ? receiverDoc.data().balance : 0;
 
-            if (senderBal >= amount) {
-              await senderRef.update({ balance: senderBal - amount });
-              await receiverRef.update({ balance: receiverBal + amount });
+            if (senderBal >= 100) {
+              await senderRef.update({ balance: senderBal - 100 });
+              await receiverRef.set({ balance: receiverBal + 100 }, { merge: true });
 
-              alert(`₹${amount} sent to ${receiverID}`);
+              alert(`✅ Sent ₹100 to ${receiverID}`);
+              updateBalance();
             } else {
-              alert("❌ Insufficient balance.");
+              alert("❌ Not enough balance");
             }
           };
-
         } catch (err) {
-          alert("❌ NFC scan failed: " + err);
+          alert("❌ NFC scan failed: " + err.message);
         }
       } else {
-        alert("❌ Web NFC not supported. Use Chrome on Android.");
+        document.getElementById("status").innerText = "❌ Web NFC not supported on this device.";
       }
     }
 
-    window.addEventListener("load", startNFC);
+    async function writeNFC() {
+      const id = currentUserID;
+      if (!id) return alert("Login first");
+
+      if ('NDEFWriter' in window) {
+        try {
+          const writer = new NDEFWriter();
+          await writer.write({ records: [{ recordType: "text", data: id }] });
+          alert("✅ ID written to NFC tag!");
+        } catch (err) {
+          alert("❌ NFC write failed: " + err.message);
+        }
+      } else {
+        alert("❌ NFC writing not supported");
+      }
+    }
   </script>
 </body>
 </html>
