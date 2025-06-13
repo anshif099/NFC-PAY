@@ -1,183 +1,161 @@
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html><html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>NFC Trigger P2P Payment</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <title>NFC Auto Pay</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
-      background: #121212;
+      background: #111;
       color: white;
-      font-family: Arial, sans-serif;
+      font-family: Arial;
       padding: 20px;
     }
     .container {
-      max-width: 420px;
+      max-width: 400px;
       margin: auto;
-      background: #1f1f1f;
-      border-radius: 15px;
-      box-shadow: 0 0 15px #00ff88;
+      background: #1e1e1e;
+      border-radius: 12px;
       padding: 20px;
+      box-shadow: 0 0 12px #00ff99;
     }
     input, button {
       width: 100%;
       padding: 12px;
       margin-top: 10px;
+      border: none;
       border-radius: 8px;
       font-size: 16px;
-      border: none;
     }
     button {
-      background: #00ff88;
-      font-weight: bold;
+      background: #00ff99;
       color: black;
+      font-weight: bold;
     }
-    #dashboard { display: none; }
+    #balanceBox { margin-top: 15px; }
+    #pairCodeDisplay {
+      background: black;
+      padding: 10px;
+      margin-top: 10px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
-
 <div class="container">
-  <h2>NFC Trigger P2P Pay</h2>
+  <h2>💳 NFC Auto Pay</h2>
   <input id="username" placeholder="Enter your username">
-  <button onclick="login()">Login/Register</button>
+  <button onclick="login()">Login</button>  <div id="app" style="display:none">
+    <p>Welcome <b><span id="userLabel"></span></b></p>
+    <p id="balanceBox">Balance: ₹<span id="balance"></span></p><hr>
+<h3>Ready to Receive</h3>
+<input id="setAmount" placeholder="Set Amount ₹" type="number">
+<button onclick="writeNFC()">Write to NFC</button>
+<div id="pairCodeDisplay"></div>
 
-  <div id="dashboard">
-    <p>Welcome, <span id="userLabel"></span></p>
-    <p>Balance: ₹<span id="balance">0</span></p>
+<hr>
+<h3>Sender: Tap to Pay</h3>
+<button onclick="scanNFC()">Scan NFC & Auto Pay</button>
 
-    <hr>
-    <h3>Set Receiver</h3>
-    <input id="receiver" placeholder="Enter receiver username">
-    <input id="amount" type="number" placeholder="Enter amount to send">
-    <button onclick="startNFC()">🚀 Start NFC Transfer</button>
-
-    <h4>Transaction History</h4>
-    <ul id="txnList"></ul>
   </div>
-</div>
+</div><script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+import { getDatabase, ref, set, update, get } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
 
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-  import {
-    getDatabase, ref, get, set, update, onValue
-  } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+const firebaseConfig = {
+  apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
+  authDomain: "nfc-3dd64.firebaseapp.com",
+  databaseURL: "https://nfc-3dd64-default-rtdb.firebaseio.com",
+  projectId: "nfc-3dd64",
+  storageBucket: "nfc-3dd64.appspot.com",
+  messagingSenderId: "536652690858",
+  appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3"
+};
 
-  // Your Firebase config
-  const firebaseConfig = {
-    apiKey: "AIzaSyD-N7uZC_6F-wslgo4Vx7JZ8VYxkA4m6lU",
-    authDomain: "nfcapp-93ba9.firebaseapp.com",
-    databaseURL: "https://nfcapp-93ba9-default-rtdb.firebaseio.com",
-    projectId: "nfcapp-93ba9",
-    storageBucket: "nfcapp-93ba9.appspot.com",
-    messagingSenderId: "655202190434",
-    appId: "1:655202190434:web:803005401514b8d3e0ec46"
-  };
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  let currentUser = "";
-  let lastTxnCount = 0;
+let currentUser = "";
 
-  window.login = async function () {
-    const username = document.getElementById("username").value.trim();
-    if (!username) return alert("Please enter username");
-    currentUser = username;
+window.login = async function () {
+  currentUser = document.getElementById("username").value.trim();
+  if (!currentUser) return alert("Enter username");
 
-    const userRef = ref(db, "users/" + username);
-    const snap = await get(userRef);
-    if (!snap.exists()) {
-      await set(userRef, { balance: 1000, history: [] });
+  const userRef = ref(db, 'users/' + currentUser);
+  const snap = await get(userRef);
+  if (!snap.exists()) {
+    await set(userRef, { balance: 1000 });
+  }
+
+  document.getElementById("app").style.display = "block";
+  document.getElementById("userLabel").innerText = currentUser;
+  const userData = (await get(userRef)).val();
+  document.getElementById("balance").innerText = userData.balance;
+};
+
+window.writeNFC = async function () {
+  const amount = parseInt(document.getElementById("setAmount").value.trim());
+  if (!amount || amount <= 0 || amount > 100000) return alert("Enter valid amount ≤ ₹100000");
+
+  const code = `${currentUser}#${Date.now()}`;
+  await update(ref(db, 'users/' + currentUser), { pairCode: code, setAmount: amount });
+  document.getElementById("pairCodeDisplay").innerText = "PairCode: " + code;
+
+  if ("NDEFWriter" in window) {
+    try {
+      const writer = new NDEFWriter();
+      await writer.write(code);
+      alert("NFC Tag written successfully");
+    } catch (err) {
+      alert("NFC write failed: " + err);
     }
+  } else {
+    alert("NFC write not supported on this device");
+  }
+};
 
-    document.getElementById("dashboard").style.display = "block";
-    document.getElementById("userLabel").innerText = currentUser;
+window.scanNFC = async function () {
+  if (!("NDEFReader" in window)) return alert("NFC not supported");
 
-    updateBalance();
-    loadHistory();
+  try {
+    const reader = new NDEFReader();
+    await reader.scan();
+    reader.onreading = async event => {
+      const decoder = new TextDecoder();
+      for (const record of event.message.records) {
+        if (record.recordType === "text") {
+          const tag = decoder.decode(record.data);
+          const [receiver] = tag.split("#");
 
-    onValue(ref(db, 'users/' + currentUser + '/history'), (snap) => {
-      const txns = snap.val() || [];
-      if (txns.length > lastTxnCount) {
-        const newTxn = txns[txns.length - 1];
-        if (newTxn.startsWith("+ ₹")) {
-          new Notification("💰 Money Received!", {
-            body: newTxn,
-            icon: "https://cdn-icons-png.flaticon.com/512/992/992651.png"
+          const senderSnap = await get(ref(db, 'users/' + currentUser));
+          const receiverSnap = await get(ref(db, 'users/' + receiver));
+
+          if (!senderSnap.exists() || !receiverSnap.exists()) return alert("User not found");
+
+          const senderData = senderSnap.val();
+          const receiverData = receiverSnap.val();
+
+          if (receiverData.pairCode !== tag) return alert("PairCode mismatch");
+
+          const amount = receiverData.setAmount || 0;
+          if (amount > 100000) return alert("Exceeds ₹100000 limit");
+          if (senderData.balance < amount) return alert("Insufficient balance");
+
+          const now = new Date().toLocaleString();
+          await update(ref(db, 'users/' + currentUser), {
+            balance: senderData.balance - amount
           });
+          await update(ref(db, 'users/' + receiver), {
+            balance: receiverData.balance + amount
+          });
+
+          alert(`₹${amount} sent to ${receiver}`);
         }
       }
-      lastTxnCount = txns.length;
-      loadHistory();
-    });
-
-    if (Notification.permission !== "granted") {
-      await Notification.requestPermission();
-    }
-  };
-
-  async function updateBalance() {
-    const snap = await get(ref(db, 'users/' + currentUser));
-    document.getElementById("balance").innerText = snap.val().balance;
+    };
+  } catch (e) {
+    alert("NFC scan failed: " + e);
   }
-
-  async function loadHistory() {
-    const snap = await get(ref(db, 'users/' + currentUser + '/history'));
-    const history = snap.val() || [];
-    const list = document.getElementById("txnList");
-    list.innerHTML = "";
-    history.slice().reverse().forEach(txn => {
-      const li = document.createElement("li");
-      li.innerText = txn;
-      list.appendChild(li);
-    });
-  }
-
-  window.startNFC = async function () {
-    const receiver = document.getElementById("receiver").value.trim();
-    const amount = parseInt(document.getElementById("amount").value.trim());
-    if (!receiver || !amount || amount <= 0) {
-      return alert("Enter valid receiver and amount");
-    }
-
-    const sSnap = await get(ref(db, 'users/' + currentUser));
-    const senderBal = sSnap.val().balance;
-    if (senderBal < amount) return alert("Insufficient balance");
-
-    const rSnap = await get(ref(db, 'users/' + receiver));
-    if (!rSnap.exists()) return alert("Receiver not found");
-
-    if (!("NDEFReader" in window)) return alert("NFC not supported on this device/browser");
-
-    try {
-      const reader = new NDEFReader();
-      await reader.scan();
-
-      alert("Bring devices close to trigger NFC...");
-
-      reader.onreading = async () => {
-        const now = new Date().toLocaleString();
-        const txnSender = `- ₹${amount} to ${receiver} at ${now}`;
-        const txnReceiver = `+ ₹${amount} from ${currentUser} at ${now}`;
-
-        await update(ref(db, 'users/' + currentUser), {
-          balance: senderBal - amount,
-          history: [...(sSnap.val().history || []), txnSender]
-        });
-
-        await update(ref(db, 'users/' + receiver), {
-          balance: rSnap.val().balance + amount,
-          history: [...(rSnap.val().history || []), txnReceiver]
-        });
-
-        alert(`✅ ₹${amount} sent to ${receiver}`);
-        updateBalance();
-      };
-    } catch (err) {
-      alert("❌ NFC failed: " + err);
-    }
-  };
-</script>
-
-</body>
+};
+</script></body>
 </html>
