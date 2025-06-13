@@ -2,219 +2,112 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>My Bank Wallet</title>
+  <title>Card to UPI Pay</title>
   <style>
-    /* ——— GLOBAL STYLES ——— */
-    * {box-sizing: border-box;margin:0;padding:0;font-family:'Segoe UI',sans-serif;}
-    body {background:#121212;color:#fff;padding:20px;}
-    h1{text-align:center;margin-bottom:20px;color:#00e676;}/* ——— CARD + PAYMENT CONTAINERS ——— */
-.panel{background:#1e1e1e;padding:16px;border-radius:12px;margin-bottom:24px;box-shadow:0 0 12px #00e67633;transition:.3s;}
-.panel:hover{box-shadow:0 0 16px #00c85355;}
-
-input,select,button{width:100%;padding:12px;margin:12px 0;border-radius:8px;border:none;font-size:16px;}
-input,select{background:#2c2c2c;color:#fff;}
-button{background:#00e676;color:#000;font-weight:bold;cursor:pointer;}
-button:hover{background:#00c853;}
-
-.card-item{background:#2e2e2e;padding:10px;border-radius:8px;margin:6px 0;}
-.tx-item{background:#1b1b1b;padding:10px;border-radius:8px;margin:6px 0;font-size:14px;}
-.success{color:#00e676;text-align:center;font-weight:bold;margin-top:6px;min-height:20px;}
-
+    body { font-family: sans-serif; background: #121212; color: white; margin: 0; padding: 0; }
+    .container { padding: 20px; max-width: 500px; margin: auto; }
+    .card { background: #1e1e1e; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 0 10px #000; }
+    input, button { width: 100%; padding: 10px; margin-top: 10px; border-radius: 8px; border: none; }
+    input { background: #2a2a2a; color: white; }
+    button { background: #00c853; color: white; font-weight: bold; cursor: pointer; }
+    h2 { margin-top: 0; }
+    #history { font-size: 14px; margin-top: 10px; max-height: 200px; overflow-y: auto; background: #191919; padding: 10px; border-radius: 8px; }
+    .tx { border-bottom: 1px solid #333; padding: 6px 0; }
   </style>
 </head>
 <body>
-  <h1>My Bank Wallet</h1>  <!-- ——— ADD CARD ——— -->  <div class="panel" id="addCardPanel">
-    <h2>Add New Card</h2>
-    <input id="cardName" placeholder="Name on Card" />
-    <input id="cardNumber" placeholder="Card Number" maxlength="16" />
-    <input id="bankName" placeholder="Bank Name (e.g., SBI, Federal)" />
-    <button id="addCardBtn">Add Card</button>
-    <div id="cardList"></div>
-  </div>  <!-- ——— PAYMENT ——— -->  <div class="panel" id="paymentPanel">
-    <h2>Make a Payment</h2>
-    <select id="selectedCard"><option value="">Select Card</option></select>
-    <input id="recipient" placeholder="Recipient Name" />
-    <input id="amount" type="number" placeholder="Amount (₹)" />
-    <button id="payBtn">Pay</button>
-    <div class="success" id="paymentStatus"></div>
-  </div>  <!-- ——— TRANSACTIONS ——— -->  <div class="panel">
-    <h2>Transactions</h2>
-    <div id="historyList"></div>
-  </div>  <!-- ——— FIREBASE SDKs (loaded on demand) ——— -->  <script type="module">
-    // —— CONFIG —— //
-    const useFirebase = false; // Toggle true to use Firebase instead of localStorage
+  <div class="container">
+    <h2>My Debit Card</h2>
+    <div class="card">
+      <p><strong>Card:</strong> **** **** **** 1234</p>
+      <p><strong>Balance:</strong> ₹<span id="balance">0</span></p>
+      <input id="addBalance" type="number" placeholder="Add ₹ to card" />
+      <button onclick="addFunds()">Add Balance</button>
+    </div><h2>Pay via UPI</h2>
+<div class="card">
+  <input id="upiId" type="text" placeholder="Enter UPI ID (e.g. user@upi)" />
+  <input id="amount" type="number" placeholder="Amount to pay" />
+  <input id="note" type="text" placeholder="Payment Note" />
+  <button onclick="makePayment()">Pay with Card</button>
+</div>
 
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_DOMAIN",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_BUCKET",
-      messagingSenderId: "YOUR_MESSAGING_ID",
-      appId: "YOUR_APP_ID"
-    };
+<h2>Transaction History</h2>
+<div class="card">
+  <div id="history"></div>
+</div>
 
-    // Global state
-    let cards = [];
-    let history = [];
-    let currentUser = null; // if using Firebase Auth
+  </div>  <script>
+    const balanceEl = document.getElementById('balance');
+    const historyEl = document.getElementById('history');
 
-    // DOM
-    const cardNameEl = document.getElementById('cardName');
-    const cardNumberEl = document.getElementById('cardNumber');
-    const bankNameEl = document.getElementById('bankName');
-    const cardListEl = document.getElementById('cardList');
-    const selectedCardEl = document.getElementById('selectedCard');
-    const recipientEl = document.getElementById('recipient');
-    const amountEl = document.getElementById('amount');
-    const paymentStatusEl = document.getElementById('paymentStatus');
-    const historyListEl = document.getElementById('historyList');
-
-    // ——— HELPERS ——— //
-    async function sha256(str){
-      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-      return Array.from(new Uint8Array(buf)).map(x=>x.toString(16).padStart(2,'0')).join('');
+    function loadBalance() {
+      let balance = localStorage.getItem('card_balance');
+      if (!balance) {
+        localStorage.setItem('card_balance', '3000'); // default ₹3,000
+        balance = '3000';
+      }
+      balanceEl.textContent = balance;
     }
 
-    function syncLocal(){
-      localStorage.setItem('cards', JSON.stringify(cards));
-      localStorage.setItem('history', JSON.stringify(history));
+    function loadHistory() {
+      const txs = JSON.parse(localStorage.getItem('tx_history') || '[]');
+      historyEl.innerHTML = txs.slice(-10).reverse().map(tx => `
+        <div class="tx">Paid ₹${tx.amount} to ${tx.upiId}<br><small>${tx.note} – ${tx.time}</small></div>
+      `).join('') || '<p>No transactions yet.</p>';
     }
 
-    function loadLocal(){
-      cards = JSON.parse(localStorage.getItem('cards')||'[]');
-      history = JSON.parse(localStorage.getItem('history')||'[]');
-    }
-
-    function renderCards(){
-      cardListEl.innerHTML = '';
-      selectedCardEl.innerHTML = '<option value="">Select Card</option>';
-      cards.forEach((c,i)=>{
-        cardListEl.innerHTML += `<div class="card-item">${c.bank} - ${c.name} (**** ${c.number.slice(-4)})</div>`;
-        selectedCardEl.innerHTML += `<option value="${i}">${c.bank} - **** ${c.number.slice(-4)}</option>`;
-      });
-    }
-
-    function renderHistory(){
-      historyListEl.innerHTML = history.reverse().slice(0,30).map(tx=>`<div class="tx-item">₹${tx.amount} → ${tx.recipient}<br><small>${tx.date} | ${tx.card.bank} ****${tx.card.number.slice(-4)}</small></div>`).join('');
-    }
-
-    // ——— PIN SETUP / AUTH ——— //
-    async function ensurePin(){
-      let pinHash = localStorage.getItem('pinHash');
-      if(!pinHash){
-        let pin = prompt('Create a 4‑digit transaction PIN');
-        if(!pin || pin.length!==4){alert('PIN must be 4 digits');return await ensurePin();}
-        pinHash = await sha256(pin);
-        localStorage.setItem('pinHash', pinHash);
-        alert('PIN set successfully!');
+    function addFunds() {
+      const add = parseInt(document.getElementById('addBalance').value);
+      if (!isNaN(add) && add > 0) {
+        let current = parseInt(localStorage.getItem('card_balance') || '0');
+        localStorage.setItem('card_balance', current + add);
+        loadBalance();
+        alert(`₹${add} added.`);
       }
     }
 
-    async function checkPin(){
-      const pin = prompt('Enter your 4‑digit PIN');
-      const ok = await sha256(pin) === localStorage.getItem('pinHash');
-      if(!ok) alert('Incorrect PIN');
-      return ok;
-    }
+    function makePayment() {
+      const upiId = document.getElementById('upiId').value.trim();
+      const amount = parseFloat(document.getElementById('amount').value);
+      const note = document.getElementById('note').value || 'Card to UPI Pay';
+      let balance = parseFloat(localStorage.getItem('card_balance'));
 
-    // ——— EVENT HANDLERS ——— //
-    document.getElementById('addCardBtn').addEventListener('click',()=>{
-      const name = cardNameEl.value.trim();
-      const number = cardNumberEl.value.trim();
-      const bank = bankNameEl.value.trim();
-      if(name && number.length===16 && bank){
-        const newCard = {name,number,bank};
-        cards.push(newCard);
-        syncLocal();
-        renderCards();
-        cardNameEl.value=cardNumberEl.value=bankNameEl.value='';
-        if(useFirebase) saveCardFirebase(newCard);
-      }else alert('Please fill all fields correctly');
-    });
-
-    document.getElementById('payBtn').addEventListener('click', async ()=>{
-      if(!(await checkPin())) return;
-      const idx = selectedCardEl.value;
-      const recipient = recipientEl.value.trim();
-      const amount = parseFloat(amountEl.value);
-      if(idx===''||!recipient||isNaN(amount)||amount<=0){
-        paymentStatusEl.style.color='red';
-        paymentStatusEl.textContent='Fill all payment fields correctly.';
+      if (!upiId.includes('@')) {
+        alert('Enter valid UPI ID.');
         return;
       }
-      const card = cards[idx];
-      const tx = {card,recipient,amount,date:new Date().toLocaleString()};
-      history.push(tx);
-      syncLocal();
-      paymentStatusEl.style.color='#00e676';
-      paymentStatusEl.textContent=`✅ ₹${amount} sent to ${recipient} using ${card.bank} ****${card.number.slice(-4)}`;
-      recipientEl.value=amountEl.value='';
-      renderHistory();
-      if(useFirebase) saveTxFirebase(tx);
-    });
 
-    // ——— FIREBASE FUNCTIONS ——— //
-    let db;
-    async function initFirebase(){
-      const {initializeApp} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
-      const {getFirestore,collection,addDoc,getDocs,query, where} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      const {getAuth,signInWithPhoneNumber, RecaptchaVerifier, onAuthStateChanged} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
-
-      const app = initializeApp(firebaseConfig);
-      db = getFirestore(app);
-      const auth = getAuth(app);
-
-      // —— PHONE OTP —— //
-      onAuthStateChanged(auth, user=>{currentUser=user;});
-      if(!auth.currentUser){
-        const phone = prompt('Enter phone for OTP login (+91xxxxxxxxxx)');
-        if(!phone){alert('Phone required');return;}
-        window.recaptchaVerifier = new RecaptchaVerifier(auth,'paymentPanel',{size:'invisible'});
-        signInWithPhoneNumber(auth, phone, window.recaptchaVerifier)
-          .then(conf => {
-            const code = prompt('Enter OTP');
-            return conf.confirm(code);
-          })
-          .catch(err=>alert('Auth error: '+err.message));
+      if (isNaN(amount) || amount <= 0) {
+        alert('Enter valid amount.');
+        return;
       }
 
-      // Load initial data once authenticated
-      await loadFirebaseData();
+      if (amount > balance) {
+        alert('Insufficient card balance.');
+        return;
+      }
+
+      const newBalance = balance - amount;
+      localStorage.setItem('card_balance', newBalance);
+      loadBalance();
+
+      // Save transaction history
+      const tx = {
+        upiId,
+        amount,
+        note,
+        time: new Date().toLocaleString()
+      };
+      const txs = JSON.parse(localStorage.getItem('tx_history') || '[]');
+      txs.push(tx);
+      localStorage.setItem('tx_history', JSON.stringify(txs));
+      loadHistory();
+
+      const upiUrl = `upi://pay?pa=${upiId}&pn=Receiver&am=${amount}&cu=INR&tn=${encodeURIComponent(note)}`;
+      window.location.href = upiUrl;
     }
 
-    async function saveCardFirebase(card){
-      if(!db||!currentUser) return;
-      const {collection,addDoc} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      await addDoc(collection(db,'cards'), {...card, uid:currentUser.uid});
-    }
-
-    async function saveTxFirebase(tx){
-      if(!db||!currentUser) return;
-      const {collection,addDoc} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      await addDoc(collection(db,'transactions'), {...tx, uid:currentUser.uid});
-    }
-
-    async function loadFirebaseData(){
-      const {collection,getDocs,query,where} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      const cardSnap = await getDocs(query(collection(db,'cards'),where('uid','==',currentUser.uid)));
-      cards = cardSnap.docs.map(d=>d.data());
-      const txSnap = await getDocs(query(collection(db,'transactions'),where('uid','==',currentUser.uid)));
-      history = txSnap.docs.map(d=>d.data());
-      renderCards();
-      renderHistory();
-    }
-
-    // ——— INIT ——— //
-    (async ()=>{
-      loadLocal();
-      renderCards();
-      renderHistory();
-      await ensurePin();
-      if(useFirebase) await initFirebase();
-    })();
-  </script>  <!-- ——— NOTE ON REAL CARD APIS ——— -->  <!--
-    Integrating actual debit/credit card payments in India requires a PCI‑DSS compliant backend, tokenisation with RuPay/Visa/Mastercard
-    via a payment gateway (e.g. Razorpay, Cashfree, PayU). The frontend would fetch a one‑time token and never handle raw card numbers.
-    That server‑side flow is beyond the scope of this single‑page demo.
-  --></body>
+    loadBalance();
+    loadHistory();
+  </script></body>
 </html>
