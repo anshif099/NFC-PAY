@@ -1,105 +1,147 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Tap to Pay - UPI NFC</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>My Bank Wallet</title>
   <style>
+    * {
+      box-sizing: border-box;
+      margin: 0; padding: 0;
+      font-family: 'Segoe UI', sans-serif;
+    }
     body {
-      font-family: sans-serif;
       background: #121212;
       color: white;
+      padding: 20px;
+    }
+    h1 {
       text-align: center;
-      padding: 20px;
+      margin-bottom: 20px;
+      color: #00e676;
     }
-    .card {
-      background: #1f1f1f;
-      padding: 20px;
-      margin-top: 30px;
-      border-radius: 15px;
-    }
-    button {
-      padding: 10px 20px;
-      border: none;
+    .card-form, .payment-form {
+      background: #1e1e1e;
+      padding: 15px;
       border-radius: 10px;
-      background: #00c853;
-      color: white;
+      margin-bottom: 20px;
+      box-shadow: 0 0 10px #00e67644;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border: none;
       font-size: 16px;
     }
-    input {
+    input, select {
+      background: #2c2c2c;
+      color: white;
+    }
+    button {
+      background: #00e676;
+      color: black;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    button:hover {
+      background: #00c853;
+    }
+    .card-list {
+      margin-top: 10px;
+    }
+    .card-item {
+      background: #2e2e2e;
       padding: 10px;
-      width: 80%;
-      border-radius: 10px;
-      border: none;
-      margin-bottom: 15px;
+      border-radius: 8px;
+      margin: 5px 0;
+    }
+    .success {
+      color: #00e676;
+      margin-top: 10px;
+      font-weight: bold;
+      text-align: center;
     }
   </style>
 </head>
 <body>
-  <h1>💳 NFC UPI Tap to Pay</h1>
 
-  <div class="card">
-    <h3>RECEIVER SETUP</h3>
-    <input type="text" id="upi" placeholder="yourupi@bank" />
-    <button onclick="writeUPI()">📤 Write UPI to NFC</button>
+  <h1>My Bank Wallet</h1>
+
+  <div class="card-form">
+    <h2>Add New Card</h2>
+    <input type="text" id="cardName" placeholder="Name on Card" />
+    <input type="text" id="cardNumber" placeholder="Card Number" maxlength="16" />
+    <input type="text" id="bankName" placeholder="Bank Name (e.g., SBI, Federal)" />
+    <button onclick="addCard()">Add Card</button>
+    <div class="card-list" id="cardList"></div>
   </div>
 
-  <div class="card">
-    <h3>SENDER PAY</h3>
-    <button onclick="readUPI()">📥 Tap to Pay</button>
+  <div class="payment-form">
+    <h2>Make a Payment</h2>
+    <select id="selectedCard">
+      <option value="">Select Card</option>
+    </select>
+    <input type="text" id="recipient" placeholder="Recipient Name" />
+    <input type="number" id="amount" placeholder="Amount (₹)" />
+    <button onclick="makePayment()">Pay</button>
+    <div class="success" id="paymentStatus"></div>
   </div>
 
   <script>
-    async function writeUPI() {
-      const upi = document.getElementById('upi').value.trim();
-      if (!upi.includes('@')) {
-        alert("⚠️ Enter a valid UPI ID (e.g., abc@oksbi)");
-        return;
-      }
+    let cards = [];
 
-      if (!("NDEFWriter" in window)) {
-        alert("❌ Web NFC not supported in this browser.\nUse Android Chrome or Samsung Internet over HTTPS.");
-        return;
-      }
+    function addCard() {
+      const name = document.getElementById('cardName').value.trim();
+      const number = document.getElementById('cardNumber').value.trim();
+      const bank = document.getElementById('bankName').value.trim();
 
-      try {
-        const ndef = new NDEFWriter();
-        await ndef.write({ records: [{ recordType: "text", data: upi }] });
-        alert("✅ UPI ID written to NFC.\nTap sender's phone now!");
-      } catch (err) {
-        alert("❌ Failed to write to NFC: " + err);
+      if (name && number.length === 16 && bank) {
+        const card = { name, number, bank };
+        cards.push(card);
+        updateCardList();
+        document.getElementById('cardName').value = '';
+        document.getElementById('cardNumber').value = '';
+        document.getElementById('bankName').value = '';
+      } else {
+        alert('Please fill all fields correctly.');
       }
     }
 
-    async function readUPI() {
-      if (!("NDEFReader" in window)) {
-        alert("❌ Web NFC not supported in this browser.\nUse Android Chrome or Samsung Internet.");
+    function updateCardList() {
+      const listDiv = document.getElementById('cardList');
+      const select = document.getElementById('selectedCard');
+      listDiv.innerHTML = '';
+      select.innerHTML = '<option value="">Select Card</option>';
+      cards.forEach((card, i) => {
+        listDiv.innerHTML += `<div class="card-item">${card.bank} - ${card.name} (**** ${card.number.slice(-4)})</div>`;
+        select.innerHTML += `<option value="${i}">${card.bank} - **** ${card.number.slice(-4)}</option>`;
+      });
+    }
+
+    function makePayment() {
+      const selectedIndex = document.getElementById('selectedCard').value;
+      const recipient = document.getElementById('recipient').value.trim();
+      const amount = parseFloat(document.getElementById('amount').value);
+
+      const status = document.getElementById('paymentStatus');
+
+      if (selectedIndex === '' || !recipient || isNaN(amount) || amount <= 0) {
+        status.innerText = 'Please fill all payment fields.';
+        status.style.color = 'red';
         return;
       }
 
-      try {
-        const ndef = new NDEFReader();
-        await ndef.scan();
-        alert("📡 Bring your phone close to the receiver...");
+      const card = cards[selectedIndex];
+      status.style.color = '#00e676';
+      status.innerText = `✅ ₹${amount} sent to ${recipient} using ${card.bank} card ending in ${card.number.slice(-4)}.`;
 
-        ndef.onreading = event => {
-          const record = event.message.records[0];
-          const decoder = new TextDecoder();
-          const upi = decoder.decode(record.data);
-          const amount = prompt("Enter amount to pay (INR)", "100");
-
-          if (!amount || isNaN(amount)) {
-            alert("⚠️ Invalid amount");
-            return;
-          }
-
-          const upiIntent = `upi://pay?pa=${upi}&pn=Receiver&am=${amount}&cu=INR`;
-          window.location.href = upiIntent;
-        };
-      } catch (err) {
-        alert("❌ NFC Read failed: " + err);
-      }
+      document.getElementById('recipient').value = '';
+      document.getElementById('amount').value = '';
     }
   </script>
+
 </body>
 </html>
