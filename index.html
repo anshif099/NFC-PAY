@@ -1,149 +1,88 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>NFC ₹100 Tap & Pay</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+  <meta charset="UTF-8">
+  <title>Tap to Pay - UPI NFC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
-      background: #111;
-      color: #fff;
-      font-family: 'Segoe UI', sans-serif;
+      font-family: sans-serif;
+      background: #121212;
+      color: white;
       text-align: center;
-      padding: 30px;
-    }
-    input, button {
-      padding: 10px;
-      font-size: 16px;
-      margin: 10px;
-      border-radius: 8px;
-      border: none;
+      padding: 20px;
     }
     .card {
-      background: #222;
+      background: #1f1f1f;
       padding: 20px;
-      margin: 20px auto;
+      margin-top: 30px;
       border-radius: 15px;
-      width: 90%;
-      max-width: 400px;
-      box-shadow: 0 0 10px rgba(0,255,0,0.2);
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 10px;
+      background: #00c853;
+      color: white;
+      font-size: 16px;
+    }
+    input {
+      padding: 10px;
+      width: 80%;
+      border-radius: 10px;
+      border: none;
+      margin-bottom: 15px;
     }
   </style>
 </head>
 <body>
-  <h2>NFC ₹100 Tap & Pay</h2>
+  <h1>💳 NFC UPI Tap to Pay</h1>
 
-  <div class="card" id="loginCard">
-    <h3>Login</h3>
-    <input id="userID" placeholder="Enter your ID" />
-    <button onclick="login()">Login & Get ₹100 Bonus</button>
+  <div class="card">
+    <h3>RECEIVER SETUP</h3>
+    <input type="text" id="upi" placeholder="yourupi@bank" />
+    <button onclick="writeUPI()">📤 Write UPI to NFC</button>
   </div>
 
-  <div class="card" id="mainCard" style="display:none;">
-    <h3>Welcome, <span id="showUser"></span></h3>
-    <p>Your Balance: ₹<span id="balance">0</span></p>
-    <p id="status">Tap another phone to send ₹100...</p>
-    <button onclick="writeNFC()">Write My ID to NFC (optional)</button>
+  <div class="card">
+    <h3>SENDER PAY</h3>
+    <button onclick="readUPI()">📥 Tap to Pay</button>
   </div>
 
   <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
-      authDomain: "nfc-3dd64.firebaseapp.com",
-      projectId: "nfc-3dd64",
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-
-    let currentUserID = "";
-
-    async function login() {
-      const id = document.getElementById("userID").value.trim();
-      if (!id) return alert("Please enter a valid ID");
-
-      const userRef = db.collection("users").doc(id);
-      const doc = await userRef.get();
-
-      if (!doc.exists) {
-        await userRef.set({ balance: 100 });
-        alert("🎁 ₹100 bonus added!");
-      } else {
-        alert("✅ Logged in!");
+    async function writeUPI() {
+      const upi = document.getElementById('upi').value.trim();
+      if (!upi.includes('@')) {
+        alert("Enter valid UPI ID");
+        return;
       }
 
-      currentUserID = id;
-      document.getElementById("showUser").innerText = id;
-      document.getElementById("loginCard").style.display = "none";
-      document.getElementById("mainCard").style.display = "block";
-      updateBalance();
-      startNFC();
+      try {
+        const ndef = new NDEFWriter();
+        await ndef.write({ records: [{ recordType: "text", data: upi }] });
+        alert("✅ UPI written to NFC tag. Ready to receive payment.");
+      } catch (err) {
+        alert("❌ NFC Write failed: " + err);
+      }
     }
 
-    async function updateBalance() {
-      const doc = await db.collection("users").doc(currentUserID).get();
-      const bal = doc.exists ? doc.data().balance : 0;
-      document.getElementById("balance").innerText = bal;
-    }
-
-    async function startNFC() {
-      if ('NDEFReader' in window) {
+    async function readUPI() {
+      try {
         const ndef = new NDEFReader();
-        try {
-          await ndef.scan();
-          document.getElementById("status").innerText = "📲 NFC ready. Tap another phone.";
+        await ndef.scan();
+        alert("📡 Scanning... tap receiver phone now");
 
-          ndef.onreading = async (event) => {
-            const decoder = new TextDecoder();
-            const receiverID = decoder.decode(event.message.records[0].data);
+        ndef.onreading = event => {
+          const record = event.message.records[0];
+          const upi = record.data ? record.data : new TextDecoder().decode(record.data);
+          const amount = prompt("Enter amount to pay", "100");
+          if (!amount || isNaN(amount)) return;
 
-            if (receiverID === currentUserID) {
-              alert("❌ Cannot send to yourself.");
-              return;
-            }
-
-            const senderRef = db.collection("users").doc(currentUserID);
-            const receiverRef = db.collection("users").doc(receiverID);
-            const [senderDoc, receiverDoc] = await Promise.all([
-              senderRef.get(),
-              receiverRef.get()
-            ]);
-
-            const senderBal = senderDoc.exists ? senderDoc.data().balance : 0;
-            const receiverBal = receiverDoc.exists ? receiverDoc.data().balance : 0;
-
-            if (senderBal >= 100) {
-              await senderRef.update({ balance: senderBal - 100 });
-              await receiverRef.set({ balance: receiverBal + 100 }, { merge: true });
-
-              alert(`✅ Sent ₹100 to ${receiverID}`);
-              updateBalance();
-            } else {
-              alert("❌ Not enough balance");
-            }
-          };
-        } catch (err) {
-          document.getElementById("status").innerText = "❌ NFC scan failed: " + err.message;
-        }
-      } else {
-        document.getElementById("status").innerText = "❌ Web NFC not supported on this device.";
-      }
-    }
-
-    async function writeNFC() {
-      if (!currentUserID) return alert("Login first");
-
-      if ('NDEFWriter' in window) {
-        try {
-          const writer = new NDEFWriter();
-          await writer.write({ records: [{ recordType: "text", data: currentUserID }] });
-          alert("✅ ID written to NFC tag!");
-        } catch (err) {
-          alert("❌ NFC write failed: " + err.message);
-        }
-      } else {
-        alert("❌ NFC writing not supported");
+          const intent = `upi://pay?pa=${upi}&pn=Receiver&am=${amount}&cu=INR`;
+          window.location.href = intent;
+        };
+      } catch (err) {
+        alert("❌ NFC Read failed: " + err);
       }
     }
   </script>
