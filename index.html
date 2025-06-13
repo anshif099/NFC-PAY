@@ -53,33 +53,48 @@
     async function writeUPI() {
       const upi = document.getElementById('upi').value.trim();
       if (!upi.includes('@')) {
-        alert("Enter valid UPI ID");
+        alert("⚠️ Enter a valid UPI ID (e.g., abc@oksbi)");
+        return;
+      }
+
+      if (!("NDEFWriter" in window)) {
+        alert("❌ Web NFC not supported in this browser.\nUse Android Chrome or Samsung Internet over HTTPS.");
         return;
       }
 
       try {
         const ndef = new NDEFWriter();
         await ndef.write({ records: [{ recordType: "text", data: upi }] });
-        alert("✅ UPI written to NFC tag. Ready to receive payment.");
+        alert("✅ UPI ID written to NFC.\nTap sender's phone now!");
       } catch (err) {
-        alert("❌ NFC Write failed: " + err);
+        alert("❌ Failed to write to NFC: " + err);
       }
     }
 
     async function readUPI() {
+      if (!("NDEFReader" in window)) {
+        alert("❌ Web NFC not supported in this browser.\nUse Android Chrome or Samsung Internet.");
+        return;
+      }
+
       try {
         const ndef = new NDEFReader();
         await ndef.scan();
-        alert("📡 Scanning... tap receiver phone now");
+        alert("📡 Bring your phone close to the receiver...");
 
         ndef.onreading = event => {
           const record = event.message.records[0];
-          const upi = record.data ? record.data : new TextDecoder().decode(record.data);
-          const amount = prompt("Enter amount to pay", "100");
-          if (!amount || isNaN(amount)) return;
+          const decoder = new TextDecoder();
+          const upi = decoder.decode(record.data);
+          const amount = prompt("Enter amount to pay (INR)", "100");
 
-          const intent = `upi://pay?pa=${upi}&pn=Receiver&am=${amount}&cu=INR`;
-          window.location.href = intent;
+          if (!amount || isNaN(amount)) {
+            alert("⚠️ Invalid amount");
+            return;
+          }
+
+          const upiIntent = `upi://pay?pa=${upi}&pn=Receiver&am=${amount}&cu=INR`;
+          window.location.href = upiIntent;
         };
       } catch (err) {
         alert("❌ NFC Read failed: " + err);
