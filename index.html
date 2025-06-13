@@ -39,19 +39,11 @@
       padding: 10px;
       border-radius: 10px;
     }
-    .animation {
-      width: 50px;
-      height: 50px;
-      margin: 20px auto;
-      border: 5px solid #00ff88;
-      border-top: 5px solid transparent;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
+    #transferAnimation {
       display: none;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+      text-align: center;
+      font-size: 18px;
+      margin-top: 15px;
     }
   </style>
 </head>
@@ -62,173 +54,176 @@
     <p>Welcome, <span id="userLabel"></span></p>
     <p>Balance: ₹<span id="balance">0</span></p><hr>
 <h3>Receive Money</h3>
-<input id="receiveAmount" placeholder="Set amount ₹ (Max 100000)" type="number">
+<input id="setAmount" placeholder="Set Receive Amount ₹" type="number">
 <div id="pairCodeDisplay">Waiting for tag...</div>
-<button onclick="generateAndWritePairCode()">Generate + Write to NFC</button>
+<button onclick="generatePairCode()">Generate Pair Code</button>
+<button onclick="writeNFCTag()">✍️ Write to NFC</button>
 
 <hr>
-<h3>Send Money (Auto)</h3>
-<div class="animation" id="loadingAnim"></div>
-<input id="nfcTagData" placeholder="Scan NFC (auto payment)">
-<button onclick="startNFCReader()">📡 Start NFC Scanner</button>
+<h3>Auto NFC Pay (Sender)</h3>
+<button onclick="startAutoNFC()">📲 Start NFC Scanner</button>
 
 <h4>History</h4>
 <ul id="txnList"></ul>
+<div id="transferAnimation">Transferring ₹... 💸</div>
 
   </div>
 </div><script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-import { getDatabase, ref, set, update, get, onValue } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+  import { getDatabase, ref, set, update, get, onValue } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
-  authDomain: "nfc-3dd64.firebaseapp.com",
-  databaseURL: "https://nfc-3dd64-default-rtdb.firebaseio.com",
-  projectId: "nfc-3dd64",
-  storageBucket: "nfc-3dd64.appspot.com",
-  messagingSenderId: "536652690858",
-  appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3"
-};
+  const firebaseConfig = {
+    apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
+    authDomain: "nfc-3dd64.firebaseapp.com",
+    databaseURL: "https://nfc-3dd64-default-rtdb.firebaseio.com",
+    projectId: "nfc-3dd64",
+    storageBucket: "nfc-3dd64.appspot.com",
+    messagingSenderId: "536652690858",
+    appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3"
+  };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-let currentUser = "";
-let lastTxnCount = 0;
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  let currentUser = "";
+  let lastTxnCount = 0;
 
-async function requestNFCPermission() {
-  if ("NDEFReader" in window) {
+  async function requestNFCPermission() {
+    if ("NDEFReader" in window) {
+      try {
+        const reader = new NDEFReader();
+        await reader.scan();
+        reader.onreading = () => {};
+        reader.abort();
+      } catch (e) {
+        console.warn("NFC permission denied", e);
+      }
+    }
+  }
+
+  window.login = async function () {
+    const username = document.getElementById("username").value.trim();
+    if (!username) return alert("Enter username");
+    currentUser = username;
+
+    await requestNFCPermission();
+
+    const userRef = ref(db, 'users/' + username);
+    const snap = await get(userRef);
+    if (!snap.exists()) {
+      await set(userRef, { balance: 1000, online: true, history: [] });
+    } else {
+      await update(userRef, { online: true });
+    }
+
+    document.getElementById("dashboard").style.display = "block";
+    document.getElementById("userLabel").innerText = username;
+
+    updateBalance();
+    loadHistory();
+
+    onValue(ref(db, 'users/' + username + '/history'), (snap) => {
+      const txns = snap.val() || [];
+      lastTxnCount = txns.length;
+      loadHistory();
+    });
+  };
+
+  async function updateBalance() {
+    const snap = await get(ref(db, 'users/' + currentUser));
+    document.getElementById("balance").innerText = snap.val().balance;
+  }
+
+  async function loadHistory() {
+    const snap = await get(ref(db, 'users/' + currentUser + '/history'));
+    const history = snap.val() || [];
+    const list = document.getElementById("txnList");
+    list.innerHTML = "";
+    history.slice().reverse().forEach(txn => {
+      const li = document.createElement("li");
+      li.innerText = txn;
+      list.appendChild(li);
+    });
+  }
+
+  window.generatePairCode = async function () {
+    const code = `${currentUser}#${Date.now()}`;
+    document.getElementById("pairCodeDisplay").innerText = code;
+    await update(ref(db, 'users/' + currentUser), { pairCode: code });
+  };
+
+  window.writeNFCTag = async function () {
+    if (!("NDEFWriter" in window)) return alert("NFC write not supported");
+    const code = document.getElementById("pairCodeDisplay").innerText;
+    const amount = document.getElementById("setAmount").value.trim();
+    if (!code || !amount) return alert("Generate code and set amount");
+    try {
+      const writer = new NDEFWriter();
+      await writer.write(`${code}#${amount}`);
+      alert("✅ NFC tag written with amount");
+    } catch (err) {
+      alert("Failed to write NFC: " + err);
+    }
+  };
+
+  window.startAutoNFC = async function () {
+    if (!("NDEFReader" in window)) return alert("NFC not supported");
     try {
       const reader = new NDEFReader();
       await reader.scan();
-      reader.onreading = () => {};
-      reader.abort();
-    } catch (e) {
-      console.warn("NFC permission error:", e);
-    }
-  }
-}
-
-window.login = async function () {
-  const username = document.getElementById("username").value.trim();
-  if (!username) return alert("Enter username");
-  currentUser = username;
-
-  await requestNFCPermission();
-
-  const userRef = ref(db, 'users/' + username);
-  const snap = await get(userRef);
-
-  if (!snap.exists()) {
-    await set(userRef, { balance: 1000, history: [] });
-  }
-
-  document.getElementById("dashboard").style.display = "block";
-  document.getElementById("userLabel").innerText = username;
-  updateBalance();
-  loadHistory();
-
-  onValue(ref(db, 'users/' + username + '/history'), snap => {
-    const txns = snap.val() || [];
-    if (txns.length > lastTxnCount) {
-      lastTxnCount = txns.length;
-      loadHistory();
-    }
-  });
-};
-
-async function updateBalance() {
-  const snap = await get(ref(db, 'users/' + currentUser));
-  document.getElementById("balance").innerText = snap.val().balance;
-}
-
-async function loadHistory() {
-  const snap = await get(ref(db, 'users/' + currentUser + '/history'));
-  const list = document.getElementById("txnList");
-  list.innerHTML = "";
-  (snap.val() || []).slice().reverse().forEach(txn => {
-    const li = document.createElement("li");
-    li.innerText = txn;
-    list.appendChild(li);
-  });
-}
-
-window.generateAndWritePairCode = async function () {
-  const amount = parseInt(document.getElementById("receiveAmount").value);
-  if (!amount || amount <= 0 || amount > 100000) return alert("Invalid amount (Max ₹100000)");
-  const code = `${currentUser}#${Date.now()}#${amount}`;
-
-  await update(ref(db, 'users/' + currentUser), { pairCode: code });
-  document.getElementById("pairCodeDisplay").innerText = code;
-
-  if ("NDEFWriter" in window) {
-    try {
-      const writer = new NDEFWriter();
-      await writer.write(code);
-      alert("Pair code + amount written to NFC tag");
-    } catch (err) {
-      alert("NFC write failed: " + err);
-    }
-  }
-};
-
-window.startNFCReader = async function () {
-  if (!("NDEFReader" in window)) return alert("NFC not supported");
-
-  try {
-    const reader = new NDEFReader();
-    await reader.scan();
-    reader.onreading = async (event) => {
-      const decoder = new TextDecoder();
-      for (const record of event.message.records) {
-        if (record.recordType === "text") {
-          const text = decoder.decode(record.data);
-          document.getElementById("nfcTagData").value = text;
-          await autoSendMoney(text);
+      reader.onreading = async event => {
+        const decoder = new TextDecoder();
+        for (const record of event.message.records) {
+          if (record.recordType === "text") {
+            const text = decoder.decode(record.data);
+            const [receiverTag, timestamp, amt] = text.split("#");
+            const amount = parseInt(amt);
+            if (!receiverTag || !amount || amount > 100000) return alert("Invalid or over-limit NFC");
+            await processAutoPayment(receiverTag, `${receiverTag}#${timestamp}`, amount);
+          }
         }
-      }
-    };
-  } catch (err) {
-    alert("NFC scan error: " + err);
+      };
+    } catch (e) {
+      alert("NFC scan failed: " + e);
+    }
+  };
+
+  async function processAutoPayment(receiver, pairCode, amount) {
+    const receiverRef = ref(db, 'users/' + receiver);
+    const receiverSnap = await get(receiverRef);
+    if (!receiverSnap.exists()) return alert("Receiver not found");
+    if (receiverSnap.val().pairCode !== pairCode) return alert("Pair code mismatch");
+
+    const senderSnap = await get(ref(db, 'users/' + currentUser));
+    const senderData = senderSnap.val();
+    if (senderData.balance < amount) return alert("Insufficient funds");
+
+    const now = new Date().toLocaleString();
+    const txnSender = `- ₹${amount} to ${receiver} at ${now}`;
+    const txnReceiver = `+ ₹${amount} from ${currentUser} at ${now}`;
+
+    document.getElementById("transferAnimation").style.display = "block";
+
+    await update(ref(db, 'users/' + currentUser), {
+      balance: senderData.balance - amount,
+      history: [...(senderData.history || []), txnSender]
+    });
+    await update(receiverRef, {
+      balance: receiverSnap.val().balance + amount,
+      history: [...(receiverSnap.val().history || []), txnReceiver]
+    });
+
+    document.getElementById("transferAnimation").innerText = `✅ ₹${amount} Sent to ${receiver}`;
+    setTimeout(() => {
+      document.getElementById("transferAnimation").style.display = "none";
+      updateBalance();
+      loadHistory();
+    }, 3000);
   }
-};
 
-async function autoSendMoney(tagData) {
-  const parts = tagData.split("#");
-  if (parts.length !== 3) return alert("Invalid tag format");
-  const [receiver, timestamp, amountStr] = parts;
-  const amount = parseInt(amountStr);
-
-  if (!receiver || !amount || amount > 100000) return alert("Invalid transfer details");
-
-  const senderSnap = await get(ref(db, 'users/' + currentUser));
-  const senderData = senderSnap.val();
-  if (senderData.balance < amount) return alert("Insufficient balance");
-
-  const receiverSnap = await get(ref(db, 'users/' + receiver));
-  if (!receiverSnap.exists()) return alert("Receiver not found");
-  const receiverData = receiverSnap.val();
-
-  document.getElementById("loadingAnim").style.display = "block";
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  document.getElementById("loadingAnim").style.display = "none";
-
-  const now = new Date().toLocaleString();
-  const txnSender = `- ₹${amount} to ${receiver} at ${now}`;
-  const txnReceiver = `+ ₹${amount} from ${currentUser} at ${now}`;
-
-  await update(ref(db, 'users/' + currentUser), {
-    balance: senderData.balance - amount,
-    history: [...(senderData.history || []), txnSender]
+  window.addEventListener("beforeunload", () => {
+    if (currentUser) {
+      update(ref(db, 'users/' + currentUser), { online: false });
+    }
   });
-
-  await update(ref(db, 'users/' + receiver), {
-    balance: receiverData.balance + amount,
-    history: [...(receiverData.history || []), txnReceiver]
-  });
-
-  alert("✅ Money Sent Automatically: ₹" + amount);
-  updateBalance();
-}
-
 </script></body>
 </html>
