@@ -89,11 +89,44 @@
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
   let currentUser = "";
+  let lastTxnCount = 0;
+
+  async function requestNotificationPermission() {
+    if ("Notification" in window && Notification.permission !== "granted") {
+      await Notification.requestPermission();
+    }
+  }
+
+  async function requestNFCPermission() {
+    if ("NDEFReader" in window) {
+      try {
+        const reader = new NDEFReader();
+        await reader.scan(); // triggers NFC permission prompt
+        reader.onreading = () => {}; // dummy
+        reader.onreadingerror = () => {};
+        reader.abort(); // stop after permission granted
+      } catch (e) {
+        console.warn("NFC permission denied or error:", e);
+      }
+    }
+  }
+
+  function notifyUser(title, message) {
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, {
+        body: message,
+        icon: "https://cdn-icons-png.flaticon.com/512/992/992651.png"
+      });
+    }
+  }
 
   window.login = async function () {
     const username = document.getElementById("username").value.trim();
     if (!username) return alert("Enter username");
     currentUser = username;
+
+    await requestNotificationPermission();
+    await requestNFCPermission();
 
     const hasNFC = "nfc" in navigator;
     const userRef = ref(db, 'users/' + username);
@@ -107,10 +140,22 @@
 
     document.getElementById("dashboard").style.display = "block";
     document.getElementById("userLabel").innerText = username;
+
     updateBalance();
     loadHistory();
-    onValue(ref(db, 'users/' + username + '/history'), () => loadHistory());
-  }
+
+    onValue(ref(db, 'users/' + username + '/history'), (snap) => {
+      const txns = snap.val() || [];
+      if (txns.length > lastTxnCount) {
+        const newTxn = txns[txns.length - 1];
+        if (newTxn.startsWith("+ ₹")) {
+          notifyUser("💰 Money Received!", newTxn);
+        }
+      }
+      lastTxnCount = txns.length;
+      loadHistory();
+    });
+  };
 
   async function updateBalance() {
     const snap = await get(ref(db, 'users/' + currentUser));
@@ -129,14 +174,12 @@
     });
   }
 
-  // Generate a unique code and display
   window.generatePairCode = async function () {
     const code = `${currentUser}#${Date.now()}`;
     document.getElementById("pairCodeDisplay").innerText = code;
     await update(ref(db, 'users/' + currentUser), { pairCode: code });
-  }
+  };
 
-  // Send money only if pairing code matches
   window.sendMoney = async function () {
     const tagData = document.getElementById("nfcTagData").value.trim();
     const amount = parseInt(document.getElementById("amount").value.trim());
@@ -156,7 +199,6 @@
     const senderData = senderSnap.val();
     if (senderData.balance < amount) return alert("Insufficient funds");
 
-    // Update balances
     const now = new Date().toLocaleString();
     const txnSender = `- ₹${amount} to ${receiver} at ${now}`;
     const txnReceiver = `+ ₹${amount} from ${currentUser} at ${now}`;
@@ -173,11 +215,10 @@
 
     alert("Money sent!");
     updateBalance();
-  }
+  };
 
-  // NFC Scan
   window.startNFC = async function () {
-    if (!("nfc" in navigator)) {
+    if (!("NDEFReader" in window)) {
       return alert("NFC not supported on this device.");
     }
 
@@ -197,7 +238,7 @@
     } catch (err) {
       alert("NFC scan failed: " + err);
     }
-  }
+  };
 
   window.addEventListener("beforeunload", () => {
     if (currentUser) {
