@@ -1,161 +1,98 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>NFC Auto Pay</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <title>NFC ₹100 Pay</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script defer src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
   <style>
     body {
-      background: #111;
+      background: #121212;
       color: white;
-      font-family: Arial;
-      padding: 20px;
+      text-align: center;
+      font-family: sans-serif;
+      padding-top: 100px;
     }
-    .container {
-      max-width: 400px;
-      margin: auto;
-      background: #1e1e1e;
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 0 12px #00ff99;
+    .card {
+      background: #1f1f1f;
+      border-radius: 16px;
+      padding: 30px;
+      margin: 20px;
+      box-shadow: 0 0 20px rgba(0,255,0,0.2);
+      transition: 0.3s;
     }
-    input, button {
-      width: 100%;
-      padding: 12px;
-      margin-top: 10px;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-    }
-    button {
-      background: #00ff99;
-      color: black;
-      font-weight: bold;
-    }
-    #balanceBox { margin-top: 15px; }
-    #pairCodeDisplay {
-      background: black;
-      padding: 10px;
-      margin-top: 10px;
-      border-radius: 8px;
-      font-size: 14px;
+    .card:hover {
+      transform: scale(1.02);
     }
   </style>
 </head>
 <body>
-<div class="container">
-  <h2>💳 NFC Auto Pay</h2>
-  <input id="username" placeholder="Enter your username">
-  <button onclick="login()">Login</button>  <div id="app" style="display:none">
-    <p>Welcome <b><span id="userLabel"></span></b></p>
-    <p id="balanceBox">Balance: ₹<span id="balance"></span></p><hr>
-<h3>Ready to Receive</h3>
-<input id="setAmount" placeholder="Set Amount ₹" type="number">
-<button onclick="writeNFC()">Write to NFC</button>
-<div id="pairCodeDisplay"></div>
-
-<hr>
-<h3>Sender: Tap to Pay</h3>
-<button onclick="scanNFC()">Scan NFC & Auto Pay</button>
-
+  <h1>Tap to Pay ₹100</h1>
+  <div class="card">
+    <p>Tap your phone to receiver</p>
+    <p>Auto transferring ₹100...</p>
   </div>
-</div><script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-import { getDatabase, ref, set, update, get } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
-  authDomain: "nfc-3dd64.firebaseapp.com",
-  databaseURL: "https://nfc-3dd64-default-rtdb.firebaseio.com",
-  projectId: "nfc-3dd64",
-  storageBucket: "nfc-3dd64.appspot.com",
-  messagingSenderId: "536652690858",
-  appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-
-let currentUser = "";
-
-window.login = async function () {
-  currentUser = document.getElementById("username").value.trim();
-  if (!currentUser) return alert("Enter username");
-
-  const userRef = ref(db, 'users/' + currentUser);
-  const snap = await get(userRef);
-  if (!snap.exists()) {
-    await set(userRef, { balance: 1000 });
-  }
-
-  document.getElementById("app").style.display = "block";
-  document.getElementById("userLabel").innerText = currentUser;
-  const userData = (await get(userRef)).val();
-  document.getElementById("balance").innerText = userData.balance;
-};
-
-window.writeNFC = async function () {
-  const amount = parseInt(document.getElementById("setAmount").value.trim());
-  if (!amount || amount <= 0 || amount > 100000) return alert("Enter valid amount ≤ ₹100000");
-
-  const code = `${currentUser}#${Date.now()}`;
-  await update(ref(db, 'users/' + currentUser), { pairCode: code, setAmount: amount });
-  document.getElementById("pairCodeDisplay").innerText = "PairCode: " + code;
-
-  if ("NDEFWriter" in window) {
-    try {
-      const writer = new NDEFWriter();
-      await writer.write(code);
-      alert("NFC Tag written successfully");
-    } catch (err) {
-      alert("NFC write failed: " + err);
-    }
-  } else {
-    alert("NFC write not supported on this device");
-  }
-};
-
-window.scanNFC = async function () {
-  if (!("NDEFReader" in window)) return alert("NFC not supported");
-
-  try {
-    const reader = new NDEFReader();
-    await reader.scan();
-    reader.onreading = async event => {
-      const decoder = new TextDecoder();
-      for (const record of event.message.records) {
-        if (record.recordType === "text") {
-          const tag = decoder.decode(record.data);
-          const [receiver] = tag.split("#");
-
-          const senderSnap = await get(ref(db, 'users/' + currentUser));
-          const receiverSnap = await get(ref(db, 'users/' + receiver));
-
-          if (!senderSnap.exists() || !receiverSnap.exists()) return alert("User not found");
-
-          const senderData = senderSnap.val();
-          const receiverData = receiverSnap.val();
-
-          if (receiverData.pairCode !== tag) return alert("PairCode mismatch");
-
-          const amount = receiverData.setAmount || 0;
-          if (amount > 100000) return alert("Exceeds ₹100000 limit");
-          if (senderData.balance < amount) return alert("Insufficient balance");
-
-          const now = new Date().toLocaleString();
-          await update(ref(db, 'users/' + currentUser), {
-            balance: senderData.balance - amount
-          });
-          await update(ref(db, 'users/' + receiver), {
-            balance: receiverData.balance + amount
-          });
-
-          alert(`₹${amount} sent to ${receiver}`);
-        }
-      }
+  <script>
+    // ✅ Your Firebase Project
+    const firebaseConfig = {
+      apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
+      authDomain: "nfc-3dd64.firebaseapp.com",
+      databaseURL: "https://nfc-3dd64-default-rtdb.firebaseio.com",
+      projectId: "nfc-3dd64",
+      storageBucket: "nfc-3dd64.appspot.com",
+      messagingSenderId: "536652690858",
+      appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3"
     };
-  } catch (e) {
-    alert("NFC scan failed: " + e);
-  }
-};
-</script></body>
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const senderID = "user1"; // Change to logged-in user if needed
+    const amount = 100;
+
+    async function startNFC() {
+      if ('NDEFReader' in window) {
+        const ndef = new NDEFReader();
+        try {
+          await ndef.scan();
+          console.log("NFC scan started");
+
+          ndef.onreading = async (event) => {
+            const decoder = new TextDecoder();
+            const receiverID = decoder.decode(event.message.records[0].data);
+            console.log("Receiver ID:", receiverID);
+
+            const senderRef = db.collection("users").doc(senderID);
+            const receiverRef = db.collection("users").doc(receiverID);
+
+            const [senderDoc, receiverDoc] = await Promise.all([
+              senderRef.get(),
+              receiverRef.get()
+            ]);
+
+            const senderBal = senderDoc.exists ? senderDoc.data().balance : 0;
+            const receiverBal = receiverDoc.exists ? receiverDoc.data().balance : 0;
+
+            if (senderBal >= amount) {
+              await senderRef.update({ balance: senderBal - amount });
+              await receiverRef.update({ balance: receiverBal + amount });
+
+              alert(`₹${amount} sent to ${receiverID}`);
+            } else {
+              alert("❌ Insufficient balance.");
+            }
+          };
+
+        } catch (err) {
+          alert("❌ NFC scan failed: " + err);
+        }
+      } else {
+        alert("❌ Web NFC not supported. Use Chrome on Android.");
+      }
+    }
+
+    window.addEventListener("load", startNFC);
+  </script>
+</body>
 </html>
