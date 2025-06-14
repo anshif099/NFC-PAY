@@ -1,113 +1,152 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <title>NFC Tap to Pay</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Card to UPI Pay</title>
   <style>
-    body { font-family: sans-serif; background: #121212; color: white; margin: 0; padding: 0; }
-    .container { padding: 20px; max-width: 500px; margin: auto; }
-    .card { background: #1e1e1e; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 0 10px #000; }
-    input, button { width: 100%; padding: 10px; margin-top: 10px; border-radius: 8px; border: none; }
-    input { background: #2a2a2a; color: white; }
-    button { background: #00c853; color: white; font-weight: bold; cursor: pointer; }
-    h2 { margin-top: 0; }
-    #history { font-size: 14px; margin-top: 10px; max-height: 200px; overflow-y: auto; background: #191919; padding: 10px; border-radius: 8px; }
-    .tx { border-bottom: 1px solid #333; padding: 6px 0; }
+    body {
+      background: #121212;
+      color: white;
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    .card {
+      background: linear-gradient(135deg, #2c3e50, #4ca1af);
+      padding: 20px;
+      border-radius: 20px;
+      width: 300px;
+      text-align: center;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+      margin: 20px 0;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 10px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .sender { background: #3498db; color: white; }
+    .receiver { background: #27ae60; color: white; }
+    .success {
+      background: #2ecc71;
+      color: black;
+      padding: 15px;
+      margin-top: 15px;
+      border-radius: 10px;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>My Debit Card</h2>
-    <div class="card">
-      <p><strong>Card:</strong> **** **** **** 1234</p>
-      <p><strong>Balance:</strong> ₹<span id="balance">0</span></p>
-      <input id="addBalance" type="number" placeholder="Add ₹ to card" />
-      <button onclick="addFunds()">Add Balance</button>
-    </div><h2>Pay via UPI</h2>
-<div class="card">
-  <input id="upiId" type="text" placeholder="Enter UPI ID (e.g. user@upi)" />
-  <input id="amount" type="number" placeholder="Amount to pay" />
-  <input id="note" type="text" placeholder="Payment Note" />
-  <button onclick="makePayment()">Pay with Card</button>
-</div>
+  <h1>💳 NFC Credit Card Demo</h1>
+  <div>
+    <button class="sender" onclick="setMode('sender')">I'm Sender</button>
+    <button class="receiver" onclick="setMode('receiver')">I'm Receiver</button>
+  </div>
 
-<h2>Transaction History</h2>
-<div class="card">
-  <div id="history"></div>
-</div>
+  <div class="card" id="card">
+    <h2 id="modeLabel">Select Mode</h2>
+    <p>Card No: <span id="cardId">---</span></p>
+    <p>Balance: ₹<span id="balance">0</span></p>
+  </div>
 
-  </div>  <script>
-    const balanceEl = document.getElementById('balance');
-    const historyEl = document.getElementById('history');
+  <div id="status" class="success" style="display:none;"></div>
 
-    function loadBalance() {
-      let balance = localStorage.getItem('card_balance');
-      if (!balance) {
-        localStorage.setItem('card_balance', '3000'); // default ₹3,000
-        balance = '3000';
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+    import { getDatabase, ref, set, update, get, child } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCUe6603zIO6_8ghw09iGxqq79pcx4oK7o",
+      authDomain: "nfc-3dd64.firebaseapp.com",
+      databaseURL: "https://nfc-3dd64-default-rtdb.firebaseio.com",
+      projectId: "nfc-3dd64",
+      storageBucket: "nfc-3dd64.appspot.com",
+      messagingSenderId: "536652690858",
+      appId: "1:536652690858:web:6f602deabe5a3cc50ce7d3"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let mode = '';
+    let cardId = 'CARD123';
+    let balance = 0;
+
+    window.setMode = async function(m) {
+      mode = m;
+      document.getElementById('modeLabel').innerText = m === 'sender' ? 'Sender Mode' : 'Receiver Mode';
+      document.getElementById('cardId').innerText = cardId;
+
+      if (mode === 'sender') {
+        balance = 999999;
+        await set(ref(db, 'cards/' + cardId), { balance });
+        updateUI();
+        writeCardIdToNFC();
+      } else {
+        listenForNFC();
       }
-      balanceEl.textContent = balance;
     }
 
-    function loadHistory() {
-      const txs = JSON.parse(localStorage.getItem('tx_history') || '[]');
-      historyEl.innerHTML = txs.slice(-10).reverse().map(tx => `
-        <div class="tx">Paid ₹${tx.amount} to ${tx.upiId}<br><small>${tx.note} – ${tx.time}</small></div>
-      `).join('') || '<p>No transactions yet.</p>';
+    function updateUI() {
+      document.getElementById('balance').innerText = balance;
     }
 
-    function addFunds() {
-      const add = parseInt(document.getElementById('addBalance').value);
-      if (!isNaN(add) && add > 0) {
-        let current = parseInt(localStorage.getItem('card_balance') || '0');
-        localStorage.setItem('card_balance', current + add);
-        loadBalance();
-        alert(`₹${add} added.`);
-      }
+    function showStatus(msg) {
+      const s = document.getElementById('status');
+      s.style.display = 'block';
+      s.innerText = msg;
+      setTimeout(() => s.style.display = 'none', 4000);
     }
 
-    function makePayment() {
-      const upiId = document.getElementById('upiId').value.trim();
-      const amount = parseFloat(document.getElementById('amount').value);
-      const note = document.getElementById('note').value || 'Card to UPI Pay';
-      let balance = parseFloat(localStorage.getItem('card_balance'));
-
-      if (!upiId.includes('@')) {
-        alert('Enter valid UPI ID.');
+    async function listenForNFC() {
+      if (!("NDEFReader" in window)) {
+        alert("Web NFC not supported.");
         return;
       }
-
-      if (isNaN(amount) || amount <= 0) {
-        alert('Enter valid amount.');
-        return;
+      try {
+        const reader = new NDEFReader();
+        await reader.scan();
+        showStatus("📡 Waiting for sender tap...");
+        reader.onreading = async event => {
+          const decoder = new TextDecoder();
+          const scannedId = decoder.decode(event.message.records[0].data);
+          const senderRef = ref(db, 'cards/' + scannedId);
+          const snapshot = await get(senderRef);
+          if (snapshot.exists()) {
+            let senderBal = snapshot.val().balance || 0;
+            if (senderBal >= 1000) {
+              await update(senderRef, { balance: senderBal - 1000 });
+              balance += 1000;
+              updateUI();
+              showStatus("✅ ₹1000 received from " + scannedId);
+            } else {
+              showStatus("❌ Insufficient funds.");
+            }
+          } else {
+            showStatus("❌ Card not found.");
+          }
+        };
+      } catch (err) {
+        alert("❌ NFC Error: " + err);
       }
-
-      if (amount > balance) {
-        alert('Insufficient card balance.');
-        return;
-      }
-
-      const newBalance = balance - amount;
-      localStorage.setItem('card_balance', newBalance);
-      loadBalance();
-
-      // Save transaction history
-      const tx = {
-        upiId,
-        amount,
-        note,
-        time: new Date().toLocaleString()
-      };
-      const txs = JSON.parse(localStorage.getItem('tx_history') || '[]');
-      txs.push(tx);
-      localStorage.setItem('tx_history', JSON.stringify(txs));
-      loadHistory();
-
-      const upiUrl = `upi://pay?pa=${upiId}&pn=Receiver&am=${amount}&cu=INR&tn=${encodeURIComponent(note)}`;
-      window.location.href = upiUrl;
     }
 
-    loadBalance();
-    loadHistory();
-  </script></body>
+    async function writeCardIdToNFC() {
+      if (!("NDEFWriter" in window)) return;
+      try {
+        const writer = new NDEFWriter();
+        await writer.write(cardId);
+        showStatus("✅ Card ID written to NFC");
+      } catch (e) {
+        showStatus("❌ Write failed: " + e);
+      }
+    }
+  </script>
+</body>
 </html>
