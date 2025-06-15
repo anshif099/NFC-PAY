@@ -12,15 +12,20 @@
 
   <script>
     async function writeToNFC() {
+      if (!("NDEFWriter" in window)) {
+        document.getElementById("status").innerText = "❌ Web NFC not supported on this browser";
+        return;
+      }
+
       const amount = document.getElementById("amount").value;
       const data = JSON.stringify({ amount: amount, receiverId: "receiver1" });
 
       try {
         const writer = new NDEFWriter();
         await writer.write({ records: [{ recordType: "text", data }] });
-        document.getElementById("status").innerText = `✅ ₹${amount} ready to collect`;
+        document.getElementById("status").innerText = `✅ ₹${amount} written to NFC. Tap to send.`;
       } catch (e) {
-        document.getElementById("status").innerText = "❌ NFC write failed: " + e;
+        document.getElementById("status").innerText = "❌ Write failed: " + e;
       }
     }
   </script>
