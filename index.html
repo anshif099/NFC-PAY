@@ -23,16 +23,22 @@
     const db = getDatabase(app);
 
     async function readNFC() {
+      if (!("NDEFReader" in window)) {
+        document.getElementById("status").innerText = "❌ Web NFC not supported on this browser";
+        return;
+      }
+
       try {
         const reader = new NDEFReader();
         await reader.scan();
+
         reader.onreading = async (event) => {
           const decoder = new TextDecoder();
           const text = decoder.decode(event.message.records[0].data);
           const { amount, receiverId } = JSON.parse(text);
 
           const senderRef = ref(db, "users/sender");
-          const receiverRef = ref(db, "users/" + receiverId);
+          const receiverRef = ref(db, `users/${receiverId}`);
 
           const senderSnap = await get(senderRef);
           const receiverSnap = await get(receiverRef);
@@ -47,13 +53,13 @@
             await update(senderRef, { balance: senderBal });
             await update(receiverRef, { balance: receiverBal });
 
-            document.getElementById("status").innerText = `✅ Paid ₹${amount}`;
+            document.getElementById("status").innerText = `✅ Paid ₹${amount}\nNew Balance: ₹${senderBal}`;
           } else {
             document.getElementById("status").innerText = `❌ Not enough balance (₹${senderBal})`;
           }
         };
       } catch (err) {
-        document.getElementById("status").innerText = "❌ NFC scan failed: " + err;
+        document.getElementById("status").innerText = "❌ NFC read failed: " + err;
       }
     }
 
